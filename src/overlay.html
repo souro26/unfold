@@ -1,537 +1,1575 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Unfold</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; width: 100%; overflow: hidden; background: #212121; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #ECECEC; }
-    
-    /* Canvas for visualizations - hidden by default */
-    #canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; touch-action: none; display: none; }
-    #canvas.visible { display: block; }
-    
-    /* App layout */
-    .app { display: flex; height: 100%; width: 100%; position: relative; }
-    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: #212121;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #ECECEC;
+      pointer-events: auto;
+    }
+
+    /* Canvas for visualizations - hidden and non-interactive by default so it never intercepts UI clicks */
+    #canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      touch-action: none;
+      display: none;
+      pointer-events: none;
+    }
+
+    #canvas.visible {
+      display: block;
+    }
+
+    /* App layout - explicit stacking context above #canvas */
+    .app {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      position: relative;
+      z-index: 10;
+      pointer-events: auto;
+    }
+
     /* Sidebar */
-    .sidebar { 
-      width: 270px; min-width: 270px; max-width: 320px; 
-      background: #171717; 
+    .sidebar {
+      width: 270px;
+      min-width: 270px;
+      max-width: 320px;
+      background: #171717;
       border-right: 1px solid #333;
-      display: flex; flex-direction: column;
+      display: flex;
+      flex-direction: column;
+      position: relative;
       z-index: 100;
+      pointer-events: auto;
       transition: width 0.2s ease, min-width 0.2s ease;
     }
-    .sidebar.collapsed { width: 56px; min-width: 56px; max-width: 56px; }
-    
-    .sidebar-header { 
-      display: flex; align-items: center; gap: 12px; 
-      padding: 16px 16px 12px; 
+
+    .sidebar.collapsed {
+      width: 56px;
+      min-width: 56px;
+      max-width: 56px;
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 16px 12px;
       border-bottom: 1px solid #333;
     }
-    .sidebar-header .logo { width: 28px; height: 28px; background: linear-gradient(135deg, #00d4aa, #00f0ff); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .sidebar-header .logo svg { width: 18px; height: 18px; color: #000; }
-    .sidebar-header .title { font-size: 15px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sidebar.collapsed .title { display: none; }
-    
-    .sidebar-actions { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-    .sidebar-btn { 
-      display: flex; align-items: center; gap: 12px; 
-      width: 100%; padding: 10px 12px; 
-      background: transparent; border: 1px solid transparent; 
-      border-radius: 10px; color: #A0A0A0; 
-      font-size: 14px; font-family: inherit; cursor: pointer; 
-      text-align: left; transition: all 0.15s;
+
+    .sidebar-header .logo {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #00d4aa, #00f0ff);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
-    .sidebar-btn:hover { background: #2A2A2A; border-color: #333; color: #ECECEC; }
-    .sidebar-btn .icon { width: 20px; height: 20px; flex-shrink: 0; stroke-width: 2; }
-    .sidebar-btn .shortcut { margin-left: auto; font-size: 11px; color: #666; font-family: monospace; }
-    .sidebar.collapsed .sidebar-btn .label, .sidebar.collapsed .sidebar-btn .shortcut { display: none; }
-    .sidebar.collapsed .sidebar-btn { justify-content: center; padding: 10px; }
-    
-    .click-through-toggle {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 10px; border-radius: 8px;
-      background: transparent; border: 1px solid transparent;
-      color: #A0A0A0; font-size: 12px; cursor: pointer;
+
+    .sidebar-header .logo svg {
+      width: 18px;
+      height: 18px;
+      color: #000;
+    }
+
+    .sidebar-header .title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar.collapsed .title {
+      display: none;
+    }
+
+    .sidebar-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #A0A0A0;
+      cursor: pointer;
+      margin-left: auto;
       transition: all 0.15s;
     }
-    .click-through-toggle:hover { background: #2A2A2A; border-color: #333; color: #ECECEC; }
-    .click-through-toggle .icon { width: 18px; height: 18px; flex-shrink: 0; }
-    .click-through-toggle .ct-label { display: none; }
-    .click-through-toggle .ct-status { 
-      font-size: 11px; font-weight: 600; padding: 2px 6px; 
-      border-radius: 4px; background: #2A2A2A; color: #ff6b6b;
+
+    .sidebar-toggle:hover {
+      background: #2A2A2A;
+      border-color: #333;
+      color: #ECECEC;
     }
-    .click-through-toggle.active .ct-status { background: #00d4aa; color: #000; }
-    .sidebar.collapsed .click-through-toggle .ct-label { display: none; }
-    .sidebar.collapsed .click-through-toggle { justify-content: center; padding: 8px; }
-    .sidebar.collapsed .click-through-toggle .ct-status { display: none; }
-    
-    .sidebar-divider { height: 1px; background: #333; margin: 8px 12px; }
-    
-    .sidebar-section { padding: 0 12px 12px; }
-    .sidebar-section-title { font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding: 0 4px; }
-    .sidebar.collapsed .sidebar-section-title { display: none; }
-    
-    .conversation-list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
-    .conversation-item { 
-      display: flex; align-items: center; gap: 10px; 
-      padding: 10px 12px; border-radius: 8px; 
-      background: transparent; border: none; width: 100%; 
-      text-align: left; color: #A0A0A0; font-size: 13px; 
-      cursor: pointer; transition: all 0.15s;
+
+    .sidebar-toggle .icon {
+      width: 16px;
+      height: 16px;
+      stroke-width: 2;
     }
-    .conversation-item:hover { background: #2A2A2A; color: #ECECEC; }
-    .conversation-item.active { background: #2A2A2A; color: #ECECEC; }
-    .conversation-item .icon { width: 18px; height: 18px; flex-shrink: 0; stroke-width: 2; }
-    .conversation-item .title-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-    .sidebar.collapsed .conversation-item { justify-content: center; padding: 10px; }
-    .sidebar.collapsed .conversation-item .title-text { display: none; }
-    
-    .sidebar-footer { margin-top: auto; padding: 12px; border-top: 1px solid #333; }
-    
+
+    .sidebar-actions {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sidebar-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 10px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      color: #A0A0A0;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+    }
+
+    .sidebar-btn:hover {
+      background: #2A2A2A;
+      border-color: #333;
+      color: #ECECEC;
+    }
+
+    .sidebar-btn .icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      stroke-width: 2;
+    }
+
+    .sidebar-btn .shortcut {
+      margin-left: auto;
+      font-size: 11px;
+      color: #666;
+      font-family: monospace;
+    }
+
+    .sidebar.collapsed .sidebar-btn .label,
+    .sidebar.collapsed .sidebar-btn .shortcut {
+      display: none;
+    }
+
+    .sidebar.collapsed .sidebar-btn {
+      justify-content: center;
+      padding: 10px;
+    }
+
+    .click-through-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #A0A0A0;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      width: auto;
+    }
+
+    .click-through-toggle:hover {
+      background: #2A2A2A;
+      border-color: #333;
+      color: #ECECEC;
+    }
+
+    .click-through-toggle .icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .click-through-toggle .ct-label {
+      display: none;
+    }
+
+    .click-through-toggle .ct-status {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #2A2A2A;
+      color: #ff6b6b;
+    }
+
+    .click-through-toggle.active .ct-status {
+      background: #00d4aa;
+      color: #000;
+    }
+
+    .sidebar.collapsed .click-through-toggle .ct-label {
+      display: none;
+    }
+
+    .sidebar.collapsed .click-through-toggle {
+      justify-content: center;
+      padding: 8px;
+    }
+
+    .sidebar.collapsed .click-through-toggle .ct-status {
+      display: none;
+    }
+
+    .sidebar-divider {
+      height: 1px;
+      background: #333;
+      margin: 8px 12px;
+    }
+
+    .sidebar-section {
+      padding: 0 12px 12px;
+    }
+
+    .sidebar-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      padding: 0 4px;
+    }
+
+    .sidebar.collapsed .sidebar-section-title {
+      display: none;
+    }
+
+    .conversation-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .conversation-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      color: #A0A0A0;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .conversation-item:hover {
+      background: #2A2A2A;
+      color: #ECECEC;
+    }
+
+    .conversation-item.active {
+      background: #2A2A2A;
+      color: #ECECEC;
+    }
+
+    .conversation-item .icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      stroke-width: 2;
+    }
+
+    .conversation-item .title-text {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: left;
+    }
+
+    .sidebar.collapsed .conversation-item {
+      justify-content: center;
+      padding: 10px;
+    }
+
+    .sidebar.collapsed .conversation-item .title-text {
+      display: none;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 12px;
+      border-top: 1px solid #333;
+    }
+
     /* Main conversation area */
-    .main { flex: 1; display: flex; flex-direction: column; background: #212121; min-width: 0; }
-    
-    .conversation-area { flex: 1; overflow-y: auto; padding: 32px 24px; display: flex; flex-direction: column; }
-    
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #212121;
+      min-width: 0;
+      position: relative;
+      z-index: 10;
+      pointer-events: auto;
+    }
+
+    .conversation-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+    }
+
     /* Empty state */
-    .empty-state { 
-      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; 
-      text-align: center; max-width: 560px; margin: 0 auto; width: 100%;
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      max-width: 560px;
+      margin: 0 auto;
+      width: 100%;
     }
-    .empty-state .icon { width: 64px; height: 64px; color: #00d4aa; margin-bottom: 24px; opacity: 0.6; }
-    .empty-state h1 { font-size: 28px; font-weight: 600; color: #fff; margin-bottom: 8px; line-height: 1.3; }
-    .empty-state p { font-size: 16px; color: #A0A0A0; margin-bottom: 32px; line-height: 1.5; }
-    
-    .suggestions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; width: 100%; max-width: 560px; }
-    .suggestion-card { 
-      background: #1A1A1A; border: 1px solid #333; border-radius: 14px; 
-      padding: 20px 24px; cursor: pointer; text-align: left; 
-      transition: all 0.15s; display: flex; flex-direction: column; gap: 8px;
+
+    .empty-state .icon {
+      width: 64px;
+      height: 64px;
+      color: #00d4aa;
+      margin-bottom: 24px;
+      opacity: 0.6;
     }
-    .suggestion-card:hover { background: #222; border-color: #444; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
-    .suggestion-card .icon { width: 24px; height: 24px; color: #00d4aa; }
-    .suggestion-card .title { font-size: 15px; font-weight: 500; color: #fff; }
-    .suggestion-card .desc { font-size: 13px; color: #888; }
+
+    .empty-state h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .empty-state p {
+      font-size: 16px;
+      color: #A0A0A0;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+
+    .suggestions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    .suggestion-card {
+      background: #1A1A1A;
+      border: 1px solid #333;
+      border-radius: 14px;
+      padding: 20px 24px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .suggestion-card:hover {
+      background: #222;
+      border-color: #444;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .suggestion-card .icon {
+      width: 24px;
+      height: 24px;
+      color: #00d4aa;
+    }
+
+    .suggestion-card .title {
+      font-size: 15px;
+      font-weight: 500;
+      color: #fff;
+    }
+
+    .suggestion-card .desc {
+      font-size: 13px;
+      color: #888;
+    }
 
     /* Teaching Mode Cards */
-    .teaching-modes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; width: 100%; max-width: 600px; }
-    .mode-card { 
-      background: #1A1A1A; border: 1px solid #333; border-radius: 16px; 
-      padding: 24px; cursor: pointer; text-align: left; 
-      transition: all 0.2s; display: flex; flex-direction: column; gap: 12px; position: relative;
+    .teaching-modes {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      width: 100%;
+      max-width: 600px;
+    }
+
+    .mode-card {
+      background: #1A1A1A;
+      border: 1px solid #333;
+      border-radius: 16px;
+      padding: 24px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
       background: linear-gradient(145deg, #1E1E1E 0%, #161616 100%);
     }
-    .mode-card:hover { 
+
+    .mode-card:hover {
       background: linear-gradient(145deg, #222222 0%, #1A1A1A 100%);
-      border-color: #444; 
-      transform: translateY(-4px); 
-      box-shadow: 0 12px 32px rgba(0,0,0,0.4); 
+      border-color: #444;
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
     }
-    .mode-card:focus-visible { outline: 2px solid #00d4aa; outline-offset: 2px; }
-    .mode-card .icon { width: 32px; height: 32px; color: #00d4aa; margin-bottom: 4px; }
-    .mode-card .title { font-size: 16px; font-weight: 600; color: #fff; line-height: 1.3; }
-    .mode-card .desc { font-size: 13px; color: #888; line-height: 1.5; }
-    .mode-card .shortcut { 
-      align-self: flex-end; 
-      background: #2A2A2A; 
-      padding: 4px 8px; 
-      border-radius: 6px; 
-      font-size: 11px; 
-      color: #888; 
-      font-family: monospace; 
+
+    .mode-card:focus-visible {
+      outline: 2px solid #00d4aa;
+      outline-offset: 2px;
+    }
+
+    .mode-card .icon {
+      width: 32px;
+      height: 32px;
+      color: #00d4aa;
+      margin-bottom: 4px;
+    }
+
+    .mode-card .title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1.3;
+    }
+
+    .mode-card .desc {
+      font-size: 13px;
+      color: #888;
+      line-height: 1.5;
+    }
+
+    .mode-card .shortcut {
+      align-self: flex-end;
+      background: #2A2A2A;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      color: #888;
+      font-family: monospace;
       border: 1px solid #333;
     }
-    
+
     /* Conversation messages */
-    .messages { display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 900px; margin: 0 auto; }
-    .message { display: flex; gap: 16px; max-width: 100%; animation: fadeIn 0.2s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    
-    .message.user { flex-direction: row-reverse; }
-    .message-avatar { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-    .message.user .message-avatar { background: #00d4aa; color: #000; }
-    .message.assistant .message-avatar { background: #1A1A1A; border: 1px solid #333; color: #00d4aa; }
-    .message-avatar svg { width: 18px; height: 18px; }
-    
-    .message-content { flex: 1; min-width: 0; }
-    .message.user .message-content { text-align: right; }
-    .message-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: #888; }
-    .message.user .message-header { justify-content: flex-end; }
-    .message-header .role { font-weight: 600; color: #A0A0A0; }
-    .message-header .time { color: #666; }
-    
-    .message-text { font-size: 15px; line-height: 1.7; color: #ECECEC; white-space: pre-wrap; word-wrap: break-word; }
-    .message-text code { background: #1A1A1A; padding: 2px 6px; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; font-size: 13px; color: #00d4aa; }
-    .message-text pre { background: #1A1A1A; border: 1px solid #333; border-radius: 10px; padding: 16px; margin: 12px 0; overflow-x: auto; }
-    .message-text pre code { background: transparent; padding: 0; color: #ECECEC; }
-    .message-text ul, .message-text ol { margin: 12px 0; padding-left: 24px; }
-    .message-text li { margin: 6px 0; }
-    
-    .message-text .math-inline { background: rgba(0,212,170,0.1); color: #00d4aa; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
-    
-    /* Streaming indicator */
-    .streaming-indicator { display: flex; align-items: center; gap: 8px; color: #888; font-size: 13px; padding: 8px 0; }
-    .streaming-indicator .dot { width: 6px; height: 6px; background: #00d4aa; border-radius: 50%; animation: pulse 1.4s infinite ease-in-out; }
-    .streaming-indicator .dot:nth-child(2) { animation-delay: 0.2s; }
-    .streaming-indicator .dot:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes pulse { 0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
-    
-    /* Composer */
-    .composer { 
-      padding: 20px 24px; background: #212121; 
-      border-top: 1px solid #333; 
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
     }
-    .composer-inner { max-width: 900px; margin: 0 auto; }
-    .composer-wrapper { 
-      background: #1A1A1A; border: 1px solid #333; border-radius: 16px; 
-      padding: 4px 4px 4px 16px; display: flex; align-items: flex-end; gap: 8px;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    .composer-wrapper:focus-within { border-color: #00d4aa; box-shadow: 0 0 0 2px rgba(0,212,170,0.15); }
-    
-    #composerInput { 
-      flex: 1; min-height: 48px; max-height: 200px; 
-      background: transparent; border: none; outline: none; 
-      color: #ECECEC; font-size: 15px; line-height: 1.5; font-family: inherit; 
-      padding: 10px 0; resize: none; width: 100%;
-    }
-    #composerInput::placeholder { color: #666; }
-    
-    .composer-actions { display: flex; align-items: flex-end; gap: 8px; padding-bottom: 4px; }
-    .composer-btn { 
-      width: 40px; height: 40px; border: none; border-radius: 50%; 
-      background: transparent; color: #888; cursor: pointer; 
-      display: flex; align-items: center; justify-content: center; 
-      transition: all 0.15s;
-    }
-    .composer-btn:hover { background: #2A2A2A; color: #ECECEC; }
-    .composer-btn svg { width: 20px; height: 20px; }
-    .composer-btn.send { 
-      background: linear-gradient(135deg, #00d4aa, #00f0ff); color: #000; 
-      flex-shrink: 0; margin-left: 4px;
-    }
-    .composer-btn.send:hover { transform: scale(1.05); box-shadow: 0 4px 16px rgba(0,212,170,0.5); }
-    
-    .composer-hint { font-size: 12px; color: #666; text-align: center; margin-top: 10px; }
-    
-    /* Visualization overlay */
-    .visualization-overlay { 
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
-      z-index: 200; background: #171717; display: none; flex-direction: column;
-    }
-    .visualization-overlay.visible { display: flex; }
-    .viz-header { 
-      display: flex; align-items: center; justify-content: space-between; 
-      padding: 12px 20px; border-bottom: 1px solid #333; background: #1A1A1A;
-    }
-    .viz-header .title { font-size: 15px; font-weight: 500; }
-    .viz-header .actions { display: flex; gap: 8px; }
-    .viz-btn { width: 36px; height: 36px; border: none; border-radius: 8px; background: #2A2A2A; color: #A0A0A0; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
-    .viz-btn:hover { background: #333; color: #ECECEC; }
-    .viz-btn svg { width: 18px; height: 18px; }
-    .viz-close { background: transparent; color: #888; }
-    .viz-close:hover { background: #2A2A2A; color: #fff; }
-    
-    .viz-content { flex: 1; overflow: auto; position: relative; }
-    
-    /* Click-through indicator */
-    .click-through-indicator { 
-      position: fixed; bottom: 100px; right: 24px; z-index: 1000; 
-      padding: 8px 14px; background: rgba(255,80,80,0.9); border-radius: 20px; 
-      font-size: 12px; color: #fff; opacity: 0; visibility: hidden; transition: opacity 0.2s; 
-    }
-    .click-through-indicator.visible { opacity: 1; visibility: visible; }
-    
-    /* Header bar for overlay */
-    .app-header { 
-      position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 300; 
-      background: rgba(0,0,0,0.95); border-bottom: 1px solid rgba(255,255,255,0.05); 
-      display: flex; align-items: center; padding: 0 20px; 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-      font-size: 13px; font-weight: 600; color: #00d4aa; 
-      backdrop-filter: blur(20px);
-      display: none; /* Hidden in new design */
-    }
-    
-    /* Scrollbars */
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #444; }
-    
-    /* Responsive */
-    @media (max-width: 1000px) {
-      .sidebar:not(.collapsed) { position: fixed; left: 0; top: 0; bottom: 0; z-index: 400; box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
-      .sidebar.collapsed { position: static; }
-      .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 350; }
-      .sidebar-overlay.visible { display: block; }
-    }
-    @media (max-width: 600px) {
-      .empty-state h1 { font-size: 22px; }
-      .suggestions { grid-template-columns: 1fr; }
-      .composer { padding: 16px; }
-      .conversation-area { padding: 24px 16px; }
-    }
-    
-    /* Modal overlay */
-    .modal-overlay {
-      position: fixed; inset: 0; z-index: 1000;
-      background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
-      display: flex; align-items: center; justify-content: center;
+
+    .message {
+      display: flex;
+      gap: 16px;
+      max-width: 100%;
       animation: fadeIn 0.2s ease;
     }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .message.user {
+      flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .message.user .message-avatar {
+      background: #00d4aa;
+      color: #000;
+    }
+
+    .message.assistant .message-avatar {
+      background: #1A1A1A;
+      border: 1px solid #333;
+      color: #00d4aa;
+    }
+
+    .message-avatar svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .message-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message.user .message-content {
+      text-align: right;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .message.user .message-header {
+      justify-content: flex-end;
+    }
+
+    .message-header .role {
+      font-weight: 600;
+      color: #A0A0A0;
+    }
+
+    .message-header .time {
+      color: #666;
+    }
+
+    .message-text {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #ECECEC;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .message-text code {
+      background: #1A1A1A;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 13px;
+      color: #00d4aa;
+    }
+
+    .message-text pre {
+      background: #1A1A1A;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 16px;
+      margin: 12px 0;
+      overflow-x: auto;
+    }
+
+    .message-text pre code {
+      background: transparent;
+      padding: 0;
+      color: #ECECEC;
+    }
+
+    .message-text ul,
+    .message-text ol {
+      margin: 12px 0;
+      padding-left: 24px;
+    }
+
+    .message-text li {
+      margin: 6px 0;
+    }
+
+    .message-text .math-inline {
+      background: rgba(0, 212, 170, 0.1);
+      color: #00d4aa;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    /* Streaming indicator */
+    .streaming-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #888;
+      font-size: 13px;
+      padding: 8px 0;
+    }
+
+    .streaming-indicator .dot {
+      width: 6px;
+      height: 6px;
+      background: #00d4aa;
+      border-radius: 50%;
+      animation: pulse 1.4s infinite ease-in-out;
+    }
+
+    .streaming-indicator .dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .streaming-indicator .dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      80%,
+      100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+      }
+
+      40% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* Composer */
+    .composer {
+      padding: 20px 24px;
+      background: #212121;
+      border-top: 1px solid #333;
+    }
+
+    .composer-inner {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .composer-wrapper {
+      background: #1A1A1A;
+      border: 1px solid #333;
+      border-radius: 16px;
+      padding: 4px 4px 4px 16px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .composer-wrapper:focus-within {
+      border-color: #00d4aa;
+      box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.15);
+    }
+
+    #composerInput {
+      flex: 1;
+      min-height: 48px;
+      max-height: 200px;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #ECECEC;
+      font-size: 15px;
+      line-height: 1.5;
+      font-family: inherit;
+      padding: 10px 0;
+      resize: none;
+      width: 100%;
+    }
+
+    #composerInput::placeholder {
+      color: #666;
+    }
+
+    .composer-actions {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding-bottom: 4px;
+    }
+
+    .composer-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .composer-btn:hover {
+      background: #2A2A2A;
+      color: #ECECEC;
+    }
+
+    .composer-btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .composer-btn.send {
+      background: linear-gradient(135deg, #00d4aa, #00f0ff);
+      color: #000;
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+
+    .composer-btn.send:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 16px rgba(0, 212, 170, 0.5);
+    }
+
+    .composer-hint {
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    /* Visualization overlay */
+    .visualization-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 200;
+      background: #171717;
+      display: none;
+      flex-direction: column;
+    }
+
+    .visualization-overlay.visible {
+      display: flex;
+    }
+
+    .viz-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid #333;
+      background: #1A1A1A;
+    }
+
+    .viz-header .title {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .viz-header .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .viz-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: #2A2A2A;
+      color: #A0A0A0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .viz-btn:hover {
+      background: #333;
+      color: #ECECEC;
+    }
+
+    .viz-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .viz-close {
+      background: transparent;
+      color: #888;
+    }
+
+    .viz-close:hover {
+      background: #2A2A2A;
+      color: #fff;
+    }
+
+    .viz-content {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+    }
+
+    /* Click-through indicator */
+    .click-through-indicator {
+      position: fixed;
+      bottom: 100px;
+      right: 24px;
+      z-index: 1000;
+      padding: 8px 14px;
+      background: rgba(255, 80, 80, 0.9);
+      border-radius: 20px;
+      font-size: 12px;
+      color: #fff;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .click-through-indicator.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* Sidebar overlay (hidden by default at all viewport sizes) */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 350;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #444;
+    }
+
+    /* Responsive */
+    @media (max-width: 1000px) {
+      .sidebar:not(.collapsed) {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 400;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+      }
+
+      .sidebar.collapsed {
+        position: static;
+      }
+
+      .sidebar-overlay.visible {
+        display: block !important;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .empty-state h1 {
+        font-size: 22px;
+      }
+
+      .suggestions {
+        grid-template-columns: 1fr;
+      }
+
+      .composer {
+        padding: 16px;
+      }
+
+      .conversation-area {
+        padding: 24px 16px;
+      }
+    }
+
+    /* Modal overlay */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+
     .modal {
-      background: #1A1A1A; border: 1px solid #333; border-radius: 16px;
-      width: 90%; max-width: 520px; max-height: 90vh;
-      display: flex; flex-direction: column; overflow: hidden;
+      background: #1A1A1A;
+      border: 1px solid #333;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 520px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
+
     .modal-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 20px; border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid #333;
     }
-    .modal-header h3 { font-size: 16px; font-weight: 600; }
+
+    .modal-header h3 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
     .modal-close {
-      width: 32px; height: 32px; border: none; border-radius: 8px;
-      background: transparent; color: #888; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px; line-height: 1;
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      line-height: 1;
     }
-    .modal-close:hover { background: #2A2A2A; color: #fff; }
-    .modal-body { padding: 20px; overflow-y: auto; }
-    .modal-desc { font-size: 13px; color: #888; margin-bottom: 16px; }
-    .monitor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+
+    .modal-close:hover {
+      background: #2A2A2A;
+      color: #fff;
+    }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .modal-desc {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 16px;
+    }
+
+    .monitor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
     .monitor-card {
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
-      padding: 16px 12px; background: #212121; border: 2px solid #333;
-      border-radius: 12px; cursor: pointer; transition: all 0.15s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 12px;
+      background: #212121;
+      border: 2px solid #333;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
     }
-    .monitor-card:hover { border-color: #00d4aa; background: #252525; }
-    .monitor-card.selected { border-color: #00d4aa; background: rgba(0,212,170,0.1); }
+
+    .monitor-card:hover {
+      border-color: #00d4aa;
+      background: #252525;
+    }
+
+    .monitor-card.selected {
+      border-color: #00d4aa;
+      background: rgba(0, 212, 170, 0.1);
+    }
+
     .monitor-card.primary .primary-badge {
-      background: linear-gradient(135deg, #00d4aa, #00f0ff); color: #000;
-      font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;
+      background: linear-gradient(135deg, #00d4aa, #00f0ff);
+      color: #000;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
     }
-    .monitor-preview { width: 48px; height: 36px; color: #00d4aa; opacity: 0.7; }
-    .monitor-info { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-    .monitor-name { font-size: 12px; font-weight: 500; color: #fff; text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .monitor-res { font-size: 11px; color: #666; font-family: monospace; }
+
+    .monitor-preview {
+      width: 48px;
+      height: 36px;
+      color: #00d4aa;
+      opacity: 0.7;
+    }
+
+    .monitor-info {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .monitor-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: #fff;
+      text-align: center;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .monitor-res {
+      font-size: 11px;
+      color: #666;
+      font-family: monospace;
+    }
+
     .modal-footer {
-      display: flex; justify-content: flex-end; gap: 12px;
-      padding: 16px 20px; border-top: 1px solid #333;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 16px 20px;
+      border-top: 1px solid #333;
     }
-    .btn-primary, .btn-secondary {
-      padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 500;
-      cursor: pointer; transition: all 0.15s; border: none;
+
+    .btn-primary,
+    .btn-secondary {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: none;
     }
+
     .btn-primary {
-      background: linear-gradient(135deg, #00d4aa, #00f0ff); color: #000;
+      background: linear-gradient(135deg, #00d4aa, #00f0ff);
+      color: #000;
     }
-    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,212,170,0.5); }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-secondary { background: #2A2A2A; color: #A0A0A0; border: 1px solid #333; }
-    .btn-secondary:hover { background: #333; color: #fff; }
-    
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0, 212, 170, 0.5);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #2A2A2A;
+      color: #A0A0A0;
+      border: 1px solid #333;
+    }
+
+    .btn-secondary:hover {
+      background: #333;
+      color: #fff;
+    }
+
     /* Capturing overlay */
     .capturing-overlay {
-      position: fixed; inset: 0; z-index: 1001;
-      background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
-      display: flex; align-items: center; justify-content: center;
+      position: fixed;
+      inset: 0;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .capturing-content { text-align: center; color: #fff; }
+
+    .capturing-content {
+      text-align: center;
+      color: #fff;
+    }
+
     .capturing-content .spinner {
-      width: 48px; height: 48px; border: 3px solid #333; border-top-color: #00d4aa;
-      border-radius: 50%; margin: 0 auto 16px; animation: spin 1s linear infinite;
+      width: 48px;
+      height: 48px;
+      border: 3px solid #333;
+      border-top-color: #00d4aa;
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      animation: spin 1s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .capturing-content p { font-size: 15px; color: #A0A0A0; }
-    
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .capturing-content p {
+      font-size: 15px;
+      color: #A0A0A0;
+    }
+
     /* Suggestion offer */
     .suggestion-offer {
-      border: 1px solid #00d4aa; background: rgba(0,212,170,0.05); border-radius: 12px;
+      border: 1px solid #00d4aa;
+      background: rgba(0, 212, 170, 0.05);
+      border-radius: 12px;
     }
-    .suggestion-offer .message-text { margin-bottom: 12px; }
-    .suggestion-actions { display: flex; gap: 12px; justify-content: flex-end; }
-    .suggestion-actions .btn-primary, .suggestion-actions .btn-secondary {
-      padding: 8px 16px; font-size: 12px;
+
+    .suggestion-offer .message-text {
+      margin-bottom: 12px;
     }
-    
+
+    .suggestion-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .suggestion-actions .btn-primary,
+    .suggestion-actions .btn-secondary {
+      padding: 8px 16px;
+      font-size: 12px;
+    }
+
     /* Blackboard controls */
     .blackboard-controls {
-      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-      padding: 8px 12px; margin-left: 16px; border-left: 1px solid #333;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      margin-left: 16px;
+      border-left: 1px solid #333;
     }
-    .blackboard-tools { display: flex; gap: 4px; }
+
+    .blackboard-tools {
+      display: flex;
+      gap: 4px;
+    }
+
     .tool-btn {
-      width: 36px; height: 36px; border: none; border-radius: 8px;
-      background: transparent; color: #888; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       transition: all 0.15s;
     }
-    .tool-btn:hover { background: #2A2A2A; color: #ECECEC; }
-    .tool-btn.active { background: rgba(0,212,170,0.2); color: #00d4aa; }
-    .tool-btn svg { width: 18px; height: 18px; }
-    .blackboard-actions { display: flex; gap: 4px; padding-left: 8px; border-left: 1px solid #333; }
+
+    .tool-btn:hover {
+      background: #2A2A2A;
+      color: #ECECEC;
+    }
+
+    .tool-btn.active {
+      background: rgba(0, 212, 170, 0.2);
+      color: #00d4aa;
+    }
+
+    .tool-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .blackboard-actions {
+      display: flex;
+      gap: 4px;
+      padding-left: 8px;
+      border-left: 1px solid #333;
+    }
+
     .btn-icon {
-      width: 36px; height: 36px; border: none; border-radius: 8px;
-      background: transparent; color: #888; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       transition: all 0.15s;
     }
-    .btn-icon:hover { background: #2A2A2A; color: #ECECEC; }
-    .btn-icon svg { width: 18px; height: 18px; }
-    .blackboard-status { display: flex; align-items: center; gap: 12px; padding-left: 12px; border-left: 1px solid #333; }
-    .blackboard-status span { font-size: 12px; font-weight: 500; color: #00d4aa; }
-    .btn-text { background: none; border: none; color: #888; font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
-    .btn-text:hover { background: #2A2A2A; color: #fff; }
-    
+
+    .btn-icon:hover {
+      background: #2A2A2A;
+      color: #ECECEC;
+    }
+
+    .btn-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .blackboard-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-left: 12px;
+      border-left: 1px solid #333;
+    }
+
+    .blackboard-status span {
+      font-size: 12px;
+      font-weight: 500;
+      color: #00d4aa;
+    }
+
+    .btn-text {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .btn-text:hover {
+      background: #2A2A2A;
+      color: #fff;
+    }
+
     /* Visualization result message */
     .visualization-result .message-text {
-      color: #00d4aa; font-weight: 500;
+      color: #00d4aa;
+      font-weight: 500;
     }
-    
+
     /* Settings modal */
-    .settings-modal { max-width: 420px; }
-    .setting-group { margin-bottom: 20px; }
-    .setting-group label { display: block; font-size: 13px; font-weight: 500; color: #A0A0A0; margin-bottom: 8px; }
-    .setting-group label input[type="checkbox"] { margin-right: 8px; accent-color: #00d4aa; }
-    .setting-input { width: 100%; padding: 10px 12px; background: #212121; border: 1px solid #333; border-radius: 8px; color: #ECECEC; font-size: 14px; font-family: inherit; }
-    .setting-input:focus { outline: none; border-color: #00d4aa; }
-    .api-key-input-wrapper { display: flex; gap: 8px; }
-    .api-key-input-wrapper .setting-input { flex: 1; }
-    .toggle-visibility { width: 44px; height: 44px; flex-shrink: 0; }
-    .setting-hint { font-size: 11px; color: #666; margin-top: 6px; }
-    .setting-hint a { color: #00d4aa; text-decoration: none; }
-    .setting-hint a:hover { text-decoration: underline; }
-    
+    .settings-modal {
+      max-width: 420px;
+    }
+
+    .setting-group {
+      margin-bottom: 20px;
+    }
+
+    .setting-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #A0A0A0;
+      margin-bottom: 8px;
+    }
+
+    .setting-group label input[type="checkbox"] {
+      margin-right: 8px;
+      accent-color: #00d4aa;
+    }
+
+    .setting-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #212121;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #ECECEC;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .setting-input:focus {
+      outline: none;
+      border-color: #00d4aa;
+    }
+
+    .api-key-input-wrapper {
+      display: flex;
+      gap: 8px;
+    }
+
+    .api-key-input-wrapper .setting-input {
+      flex: 1;
+    }
+
+    .toggle-visibility {
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+    }
+
+    .setting-hint {
+      font-size: 11px;
+      color: #666;
+      margin-top: 6px;
+    }
+
+    .setting-hint a {
+      color: #00d4aa;
+      text-decoration: none;
+    }
+
+    .setting-hint a:hover {
+      text-decoration: underline;
+    }
+
     /* Utility classes for CSP compliance */
-    .hidden { display: none !important; }
-    .visible { display: flex !important; }
-    .block { display: block !important; }
-    .pointer-none { pointer-events: none !important; }
-    .pointer-auto { pointer-events: auto !important; }
-    .height-auto { height: auto !important; }
-    .bg-teal { background: #00d4aa !important; color: #000 !important; }
-    .bg-red { background: #ff6b6b !important; color: #fff !important; }
-    .bg-tint { background: rgba(0,0,0,0.25) !important; }
+    .hidden {
+      display: none !important;
+    }
+
+    .visible {
+      display: flex !important;
+    }
+
+    .block {
+      display: block !important;
+    }
+
+    .pointer-none {
+      pointer-events: none !important;
+    }
+
+    .pointer-auto {
+      pointer-events: auto !important;
+    }
+
+    .height-auto {
+      height: auto !important;
+    }
+
+    .bg-teal {
+      background: #00d4aa !important;
+      color: #000 !important;
+    }
+
+    .bg-red {
+      background: #ff6b6b !important;
+      color: #fff !important;
+    }
+
+    .bg-tint {
+      background: rgba(0, 0, 0, 0.25) !important;
+    }
   </style>
 </head>
+
 <body>
   <!-- Main drawing canvas (for freehand drawing over screen) -->
-  <canvas id="canvas"></canvas>
-  
+  <canvas id="canvas" class="pointer-none"></canvas>
+
   <div class="app">
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
         </div>
         <span class="title">Unfold</span>
-        <button class="sidebar-btn click-through-toggle" id="clickThroughToggle" aria-label="Toggle click-through (Esc)" title="Click-through: OFF (Esc to toggle)">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 6.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 10.5-10.5a2.12 2.12 0 0 1 3 3z"/></svg>
+        <button class="sidebar-btn click-through-toggle" id="clickThroughToggle"
+          aria-label="Toggle click-through (Ctrl+Shift+X)" title="Click-through: OFF (Ctrl+Shift+X to toggle)">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17.5 6.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 10.5-10.5a2.12 2.12 0 0 1 3 3z" />
+          </svg>
           <span class="ct-label">Click-through</span>
           <span class="ct-status" id="ctStatus">OFF</span>
         </button>
         <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
         </button>
       </div>
-      
+
       <div class="sidebar-actions">
         <button class="sidebar-btn" id="newChatBtn" title="New chat (Ctrl+N)">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
           <span class="label">New chat</span>
           <span class="shortcut">Ctrl+N</span>
         </button>
         <button class="sidebar-btn" id="searchBtn" title="Search conversations (Ctrl+K)">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
           <span class="label">Search</span>
           <span class="shortcut">Ctrl+K</span>
         </button>
       </div>
-      
+
       <div class="sidebar-divider"></div>
-      
+
       <div class="sidebar-section">
         <div class="sidebar-section-title">Recent</div>
         <div class="conversation-list" id="conversationList">
           <!-- Populated dynamically -->
         </div>
       </div>
-      
+
       <div class="sidebar-footer">
         <button class="sidebar-btn" id="settingsBtn">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
           <span class="label">Settings</span>
         </button>
       </div>
     </aside>
-    
+
     <!-- Sidebar overlay for mobile -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
-    
+
     <!-- Main conversation area -->
     <main class="main" id="main">
       <div class="conversation-area" id="conversationArea">
         <!-- Empty state -->
         <div class="empty-state" id="emptyState">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
           <h1>What do you want to understand?</h1>
           <p>Unfold explains concepts step by step and creates interactive visualizations to help you learn.</p>
           <div class="teaching-modes" id="teachingModes">
             <button class="mode-card" id="screenTeachMode" data-mode="screen">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <path d="M8 21h8" />
+                <path d="M12 17v4" />
+              </svg>
               <span class="title">Teach me what's on my screen</span>
               <span class="desc">Capture your screen and I'll explain what you're viewing</span>
               <kbd class="shortcut">Ctrl+Shift+S</kbd>
             </button>
             <button class="mode-card" id="blackboardMode" data-mode="blackboard">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
+              </svg>
               <span class="title">Teach me on the blackboard</span>
               <span class="desc">Interactive diagrams, equations, and visual explanations</span>
               <kbd class="shortcut">Ctrl+Shift+B</kbd>
             </button>
           </div>
         </div>
-        
+
         <!-- Messages container (hidden initially) -->
         <div class="messages" id="messages" style="display: none;"></div>
       </div>
-      
+
       <!-- Composer -->
       <div class="composer">
         <div class="composer-inner">
           <div class="composer-wrapper" id="composerWrapper">
-            <textarea id="composerInput" placeholder="Message Unfold…" autocomplete="off" spellcheck="false" rows="1"></textarea>
+            <textarea id="composerInput" placeholder="Message Unfold…" autocomplete="off" spellcheck="false"
+              rows="1"></textarea>
             <div class="composer-actions">
               <button class="composer-btn" id="attachBtn" aria-label="Attach" title="Attach">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path
+                    d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49" />
+                </svg>
               </button>
               <button class="composer-btn send" id="sendBtn" aria-label="Send message" title="Send (Enter)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polyline points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
               </button>
             </div>
           </div>
-          <div class="composer-hint">Press <kbd style="background:#2A2A2A;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:11px;">Enter</kbd> to send · <kbd style="background:#2A2A2A;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:11px;">Shift+Enter</kbd> for new line</div>
+          <div class="composer-hint">Press <kbd
+              style="background:#2A2A2A;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:11px;">Enter</kbd>
+            to send · <kbd
+              style="background:#2A2A2A;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:11px;">Shift+Enter</kbd>
+            for new line</div>
         </div>
       </div>
     </main>
-    
+
     <!-- Visualization overlay -->
     <div class="visualization-overlay" id="vizOverlay">
       <div class="viz-header">
         <div class="title" id="vizTitle">Visualization</div>
         <div class="actions">
           <button class="viz-btn" id="vizFullscreen" aria-label="Fullscreen" title="Fullscreen">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
           </button>
           <button class="viz-btn viz-close" id="vizClose" aria-label="Close visualization">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
           </button>
         </div>
       </div>
@@ -539,10 +1577,10 @@
         <canvas id="vizCanvas"></canvas>
       </div>
     </div>
-    
-    <div class="click-through-indicator" id="ctIndicator">Click-through ON (Esc to exit)</div>
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="click-through-indicator" id="ctIndicator">Click-through ON (Ctrl+Shift+X to exit)</div>
   </div>
   <script type="module" src="./main.ts"></script>
 </body>
+
 </html>

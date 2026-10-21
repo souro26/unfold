@@ -11,7 +11,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager,
 };
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::overlay::OverlayManager;
@@ -29,60 +29,87 @@ fn main() {
     tracing::info!("RUST_LOG = {:?}", std::env::var("RUST_LOG"));
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_window_state::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::Builder::new()
-            .with_handler(|app, shortcut, event| {
-                tracing::debug!("Global shortcut triggered: {:?}, state: {:?}", shortcut, event.state);
-                if event.state == ShortcutState::Released { return; }
-                let shortcut_str = shortcut.to_string().to_lowercase();
-                tracing::info!("Shortcut received: '{}'", shortcut_str);
-                let state = app.state::<Arc<Mutex<overlay::OverlayManager>>>();
-                
-                // Normalize the shortcut string for matching
-                let normalized = shortcut_str.replace('+', " ").replace("key", "");
-                
-                // Check for specific combinations
-                let has_ctrl = normalized.contains("control") || normalized.contains("ctrl");
-                let has_shift = normalized.contains("shift");
-                let has_alt = normalized.contains("alt");
-                let has_u = normalized.contains("u") || normalized.contains("keyu");
-                let has_i = normalized.contains("i") || normalized.contains("keyi");
-                let has_escape = normalized.contains("escape") || normalized.contains("esc");
-                
-                // Ctrl+Shift+U: show overlay AND open command palette at bottom center
-                let is_toggle_and_palette = has_ctrl && has_shift && has_u && !has_alt;
-                // Ctrl+I: show command palette
-                let is_ctrl_i = has_ctrl && has_i && !has_shift && !has_alt;
-                // Escape (toggle click-through)
-                let is_escape = has_escape;
-                
-                tracing::info!("Parsed: ctrl={}, shift={}, u={}, i={}, esc={} -> toggle_and_palette={}, ctrl_i={}, escape={}", 
-                    has_ctrl, has_shift, has_u, has_i, has_escape, is_toggle_and_palette, is_ctrl_i, is_escape);
-                
-                if is_toggle_and_palette {
-                    tracing::info!("Action: Ctrl+Shift+U (toggle overlay + command palette at bottom)");
-                    let o = state.inner().clone();
-                    tauri::async_runtime::spawn(async move { 
-                        let mut m = o.lock().await;
-                        m.toggle().await;
-                        m.app.emit("overlay:show-command-palette-bottom", ()).ok();
-                    });
-                } else if is_ctrl_i {
-                    tracing::info!("Action: Ctrl+I (show command palette)");
-                    let o = state.inner().clone();
-                    tauri::async_runtime::spawn(async move {
-                        let mut m = o.lock().await;
-                        m.show_command_palette().await;
-                    });
-                } else if is_escape {
-                    tracing::info!("Action: Escape (toggle click-through)");
-                    let o = state.inner().clone();
-                    tauri::async_runtime::spawn(async move { o.lock().await.toggle_click_through().await; });
-                } else {
-                    tracing::warn!("Unknown shortcut format: '{}' (normalized: '{}')", shortcut_str, normalized);
-                }
-            })
-            .build())
+        // Exclude the programmatic "overlay" window from window-state persistence so saved
+        // hidden/minimized states never corrupt the transparent overlay's styles or bounds.
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_denylist(&["overlay"])
+                .build(),
+        )
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    tracing::debug!(
+                        "Global shortcut triggered: {:?}, state: {:?}",
+                        shortcut,
+                        event.state
+                    );
+                    if event.state == ShortcutState::Released {
+                        return;
+                    }
+                    let shortcut_str = shortcut.to_string().to_lowercase();
+                    tracing::info!("Shortcut received: '{}'", shortcut_str);
+                    let state = app.state::<Arc<Mutex<overlay::OverlayManager>>>();
+
+                    // Split into discrete tokens so "shift" never false-matches "i"
+                    let tokens: Vec<&str> = shortcut_str
+                        .split(|c: char| c == '+' || c.is_whitespace())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+
+                    let has_ctrl = tokens.iter().any(|&t| t == "control" || t == "ctrl");
+                    let has_shift = tokens.iter().any(|&t| t == "shift");
+                    let has_alt = tokens.iter().any(|&t| t == "alt");
+                    let has_u = tokens.iter().any(|&t| t == "u" || t == "keyu");
+                    let has_i = tokens.iter().any(|&t| t == "i" || t == "keyi");
+                    let has_x = tokens.iter().any(|&t| t == "x" || t == "keyx");
+
+                    // Ctrl+Shift+U: toggle overlay AND open command palette at bottom center
+                    let is_toggle_and_palette = has_ctrl && has_shift && has_u && !has_alt;
+                    // Ctrl+I: show command palette
+                    let is_ctrl_i = has_ctrl && has_i && !has_shift && !has_alt;
+                    // Ctrl+Shift+X: toggle click-through while overlay is visible
+                    let is_toggle_click_through = has_ctrl && has_shift && has_x && !has_alt;
+
+                    tracing::info!(
+                        "Parsed tokens={:?} -> toggle_and_palette={}, ctrl_i={}, toggle_click_through={}",
+                        tokens,
+                        is_toggle_and_palette,
+                        is_ctrl_i,
+                        is_toggle_click_through
+                    );
+
+                    if is_toggle_and_palette {
+                        tracing::info!(
+                            "Action: Ctrl+Shift+U (toggle overlay + command palette at bottom)"
+                        );
+                        let o = state.inner().clone();
+                        tauri::async_runtime::spawn(async move {
+                            let mut m = o.lock().await;
+                            m.toggle().await;
+                            if m.is_visible() {
+                                m.app.emit("overlay:show-command-palette-bottom", ()).ok();
+                            }
+                        });
+                    } else if is_ctrl_i {
+                        tracing::info!("Action: Ctrl+I (show command palette)");
+                        let o = state.inner().clone();
+                        tauri::async_runtime::spawn(async move {
+                            let mut m = o.lock().await;
+                            m.show_command_palette().await;
+                        });
+                    } else if is_toggle_click_through {
+                        tracing::info!("Action: Ctrl+Shift+X (toggle click-through)");
+                        let o = state.inner().clone();
+                        tauri::async_runtime::spawn(async move {
+                            o.lock().await.toggle_click_through().await;
+                        });
+                    } else {
+                        tracing::warn!("Unknown shortcut format: '{}'", shortcut_str);
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -154,7 +181,10 @@ fn setup_tray(app: &AppHandle) -> anyhow::Result<()> {
     let icon_size = 16;
     let mut icon_buffer = vec![0u8; icon_size * icon_size * 4];
     for i in (0..icon_buffer.len()).step_by(4) {
-        icon_buffer[i] = 0; icon_buffer[i + 1] = 212; icon_buffer[i + 2] = 170; icon_buffer[i + 3] = 255;
+        icon_buffer[i] = 0;
+        icon_buffer[i + 1] = 212;
+        icon_buffer[i + 2] = 170;
+        icon_buffer[i + 3] = 255;
     }
     let icon = tauri::image::Image::new_owned(icon_buffer, icon_size as u32, icon_size as u32);
     tracing::debug!("Tray icon created: {}x{}", icon_size, icon_size);
@@ -167,7 +197,9 @@ fn setup_tray(app: &AppHandle) -> anyhow::Result<()> {
             "show" => {
                 tracing::info!("Tray menu: Show Overlay clicked");
                 let o = app.state::<Arc<Mutex<overlay::OverlayManager>>>().inner().clone();
-                tauri::async_runtime::spawn(async move { o.lock().await.show().await; });
+                tauri::async_runtime::spawn(async move {
+                    o.lock().await.show().await;
+                });
             }
             "quit" => {
                 tracing::info!("Tray menu: Quit clicked");
@@ -177,7 +209,12 @@ fn setup_tray(app: &AppHandle) -> anyhow::Result<()> {
         })
         .on_tray_icon_event(|_tray, event| {
             tracing::debug!("Tray icon event: {:?}", event);
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {}
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {}
         })
         .build(app)?;
 
@@ -191,7 +228,9 @@ fn setup_global_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Err
     tracing::info!("Registered: Ctrl+Shift+U");
     app.global_shortcut().register("ctrl+i")?;
     tracing::info!("Registered: Ctrl+I");
-    app.global_shortcut().register("escape")?;
-    tracing::info!("Registered: Escape");
+    // Use Ctrl+Shift+X instead of bare Escape as a global OS-wide hotkey so Escape does not
+    // hijack every application or unexpectedly enable click-through when closing modals.
+    app.global_shortcut().register("ctrl+shift+x")?;
+    tracing::info!("Registered: Ctrl+Shift+X (toggle click-through)");
     Ok(())
 }
