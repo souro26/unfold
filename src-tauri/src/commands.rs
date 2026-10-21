@@ -28,7 +28,8 @@ impl Default for AppState {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SendMessageRequest {
     pub prompt: String,
-    pub conversation_id: String,
+    #[serde(default)]
+    pub conversation_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -142,14 +143,20 @@ pub async fn set_click_through(state: State<'_, std::sync::Arc<tokio::sync::Mute
 #[command]
 pub async fn send_message(
     state: State<'_, crate::commands::AppState>,
-    request: SendMessageRequest
+    prompt: Option<String>,
+    conversation_id: Option<String>,
+    request: Option<SendMessageRequest>,
 ) -> Result<String, String> {
     let settings = state.settings.read().unwrap().clone();
     
     let api_key = settings.api_key.clone()
         .ok_or_else(|| "No API key configured. Please set your API key in settings.".to_string())?;
     
-    let prompt = request.prompt.clone();
+    let prompt = prompt
+        .or_else(|| request.as_ref().map(|r| r.prompt.clone()))
+        .ok_or_else(|| "Missing required parameter `prompt`".to_string())?;
+    let _conversation_id = conversation_id
+        .or_else(|| request.and_then(|r| r.conversation_id));
     let model = settings.model.clone();
     
     let system_prompt = r#"You are Unfold, an AI teaching assistant that explains concepts clearly and creates interactive visualizations.

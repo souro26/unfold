@@ -200,7 +200,12 @@ function redraw() {
 
 function redrawSkia() {
   if (!_skia) return;
-  const surface = _skia.MakeCanvasSurface(canvas);
+  let surface: any = null;
+  try {
+    surface = _skia.MakeCanvasSurface(canvas);
+  } catch (err) {
+    console.warn('Skia MakeCanvasSurface failed, falling back to Canvas 2D:', err);
+  }
   if (!surface) {
     useSkia = false;
     redrawCanvas2D();
@@ -512,7 +517,11 @@ async function sendToAI(prompt: string) {
   try {
     const response = await invoke<string>('send_message', {
       prompt,
-      conversation_id: currentConversationId
+      conversation_id: currentConversationId,
+      request: {
+        prompt,
+        conversation_id: currentConversationId
+      }
     });
 
     let fullResponse = response;
@@ -1039,7 +1048,11 @@ async function sendToAIWithBlackboardContext(prompt: string) {
     
     const response = await invoke<string>('send_message', {
       prompt: enhancedPrompt,
-      conversation_id: currentConversationId
+      conversation_id: currentConversationId,
+      request: {
+        prompt: enhancedPrompt,
+        conversation_id: currentConversationId
+      }
     });
 
     let fullResponse = response;
