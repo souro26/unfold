@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Rust / Cargo build outputs
+target/
+src-tauri/target/
+
+# Frontend build outputs
+dist/
+dist-ssr/
+build/
+*.local
+
+# Tauri bundle outputs
+*.app/
+*.dmg/
+*.msi/
+*.exe/
+*.AppImage/
+*.deb/
+*.rpm/
+
+# Environment & API keys
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Temporary & Scratch files
+*.tmp
+*.temp
+temp/
+scratch/
+.tempmediaStorage/
+*.rs.bk
+
+# Vision / OCR temporary captures
+unfold_ocr_*.png
+unfold_capture_*.png
+unfold_temp_*.png
