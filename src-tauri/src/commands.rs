@@ -57,13 +57,14 @@ struct Choice {
 }
 
 // Use types from screen_capture module
-use crate::screen_capture::{ScreenCaptureRequest, ScreenCaptureResponse, ScreenRegion, VisionRequest, VisionResponse, MonitorInfo};
+use crate::screen_capture::{ScreenCaptureRequest, ScreenCaptureResponse};
 
 // Gemini types at module level to avoid duplicates in functions
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GeminiRequest {
     contents: Vec<GeminiContent>,
-    generationConfig: GeminiConfig,
+    generation_config: GeminiConfig,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -77,9 +78,10 @@ struct GeminiPart {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GeminiConfig {
     temperature: f32,
-    maxOutputTokens: u32,
+    max_output_tokens: u32,
 }
 
 #[derive(Deserialize)]
@@ -220,30 +222,7 @@ Keep responses clear, educational, and engaging. Use markdown formatting."#;
             }
             header_map
         })
-        .json(&ChatCompletionRequest {
-            model: model,
-            messages: vec![
-                ChatMessage { role: "system".to_string(), content: r#"You are Unfold, an AI teaching assistant that explains concepts clearly and creates interactive visualizations.
-
-When explaining concepts:
-1. Break down complex topics into clear, logical steps
-2. Use analogies and concrete examples
-3. Structure responses with clear headings
-4. Include code examples when relevant
-5. Suggest visualizations when appropriate
-
-For visualizations, respond with a special marker:
-<<<VISUALIZATION:type:params>>>
-Where type can be: algorithm, diagram, chart, equation
-And params is a JSON object with visualization parameters.
-
-Keep responses clear, educational, and engaging. Use markdown formatting."#.to_string() },
-                ChatMessage { role: "user".to_string(), content: prompt.clone() },
-            ],
-            temperature: 0.7,
-            max_tokens: 4096,
-            stream: false,
-        })
+        .json(&request_body)
         .send()
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
@@ -272,9 +251,9 @@ async fn call_gemini(url: &str, prompt: String) -> Result<String, String> {
             GeminiContent { parts: vec![GeminiPart { text: system_prompt.to_string() }] },
             GeminiContent { parts: vec![GeminiPart { text: prompt }] },
         ],
-        generationConfig: GeminiConfig {
+        generation_config: GeminiConfig {
             temperature: 0.7,
-            maxOutputTokens: 4096,
+            max_output_tokens: 4096,
         },
     };
 

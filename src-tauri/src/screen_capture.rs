@@ -84,7 +84,7 @@ pub async fn list_monitors() -> Result<Vec<MonitorInfo>, String> {
         }
 
         unsafe {
-            EnumDisplayMonitors(
+            let _ = EnumDisplayMonitors(
                 HDC::default(),
                 None,
                 Some(monitor_enum_proc),
@@ -121,13 +121,13 @@ mod windows_gdi_capture {
         // Get desktop window
         let desktop_hwnd = unsafe { GetDesktopWindow() };
         let mut rect = RECT::default();
-        unsafe { GetWindowRect(desktop_hwnd, &mut rect) };
+        unsafe { let _ = GetWindowRect(desktop_hwnd, &mut rect); };
 
         let screen_width = (rect.right - rect.left) as u32;
         let screen_height = (rect.bottom - rect.top) as u32;
 
         // Get monitor index if specified
-        let monitor_index = request.region.as_ref().map(|r| r.x as usize).unwrap_or(0);
+        let _monitor_index = request.region.as_ref().map(|r| r.x as usize).unwrap_or(0);
         
         // For multi-monitor, we'd need to get the specific monitor's rect
         // For now, capture the primary monitor (entire virtual screen)
@@ -152,7 +152,7 @@ mod windows_gdi_capture {
             // Create compatible bitmap
             let bitmap = CreateCompatibleBitmap(desktop_dc, capture_width as i32, capture_height as i32);
             if bitmap.0.is_null() {
-                DeleteDC(mem_dc);
+                let _ = DeleteDC(mem_dc);
                 return Err("Failed to create compatible bitmap".to_string());
             }
 
@@ -172,8 +172,8 @@ mod windows_gdi_capture {
 
             if result.is_err() {
                 SelectObject(mem_dc, old_bitmap);
-                DeleteObject(bitmap);
-                DeleteDC(mem_dc);
+                let _ = DeleteObject(bitmap);
+                let _ = DeleteDC(mem_dc);
                 return Err("BitBlt failed".to_string());
             }
 
@@ -203,15 +203,15 @@ mod windows_gdi_capture {
 
             if lines == 0 {
                 SelectObject(mem_dc, old_bitmap);
-                DeleteObject(bitmap);
-                DeleteDC(mem_dc);
+                let _ = DeleteObject(bitmap);
+                let _ = DeleteDC(mem_dc);
                 return Err("GetDIBits failed".to_string());
             }
 
             // Cleanup
             SelectObject(mem_dc, old_bitmap);
-            DeleteObject(bitmap);
-            DeleteDC(mem_dc);
+            let _ = DeleteObject(bitmap);
+            let _ = DeleteDC(mem_dc);
 
             debug!("Captured frame: {}x{}", capture_width, capture_height);
 
@@ -549,9 +549,10 @@ async fn call_gemini_vision(request: VisionRequest) -> Result<VisionResponse, St
     let api_key = request.api_key.ok_or("Gemini API key required")?;
 
     #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
     struct GeminiRequest {
         contents: Vec<GeminiContent>,
-        generationConfig: GeminiConfig,
+        generation_config: GeminiConfig,
     }
 
     #[derive(serde::Serialize)]
@@ -573,9 +574,10 @@ async fn call_gemini_vision(request: VisionRequest) -> Result<VisionResponse, St
     }
 
     #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
     struct GeminiConfig {
         temperature: f32,
-        maxOutputTokens: u32,
+        max_output_tokens: u32,
     }
 
     #[derive(serde::Deserialize)]
@@ -614,9 +616,9 @@ async fn call_gemini_vision(request: VisionRequest) -> Result<VisionResponse, St
 
     let body = GeminiRequest {
         contents: vec![GeminiContent { parts }],
-        generationConfig: GeminiConfig {
+        generation_config: GeminiConfig {
             temperature: 0.7,
-            maxOutputTokens: 4096,
+            max_output_tokens: 4096,
         },
     };
 
