@@ -29,6 +29,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
     case 'update_settings':      saveLocalSettings((args as any)?.settings); return undefined as T;
     case 'toggle_click_through': return false as T;
     case 'set_click_through':    return false as T;
+    case 'toggle_overlay':       return true as T;
     case 'send_message': {
       const p = (args as any)?.prompt ?? '';
       return `[Browser preview — Tauri not running]\n\nYou asked: "${p}"\n\nFor real AI replies launch with **npm run tauri dev**.` as T;
@@ -1363,6 +1364,12 @@ async function toggleClickThrough() {
 }
 
 document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'u') {
+    e.preventDefault();
+    invoke('toggle_overlay').catch(console.error);
+    return;
+  }
+
   if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
     if (e.key === 'Escape') {
       (e.target as HTMLElement).blur();

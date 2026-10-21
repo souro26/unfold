@@ -1,3 +1,4 @@
+use std::time::{Duration, Instant};
 use tauri::{Emitter, WebviewUrl, WebviewWindowBuilder};
 use tracing::{debug, error, info, warn};
 
@@ -13,6 +14,7 @@ pub struct OverlayManager {
     window: Option<tauri::WebviewWindow>,
     state: OverlayState,
     click_through: bool,
+    last_toggle: Option<Instant>,
 }
 
 impl OverlayManager {
@@ -23,6 +25,7 @@ impl OverlayManager {
             window: None,
             state: OverlayState::Hidden,
             click_through: false,
+            last_toggle: None,
         }
     }
 
@@ -53,9 +56,6 @@ impl OverlayManager {
             logical_width, logical_height
         );
 
-        // NOTE: Do NOT set `.focused(false)` here. On Windows (tao/wry), `.focused(false)`
-        // applies `WS_EX_NOACTIVATE` to the window extended style, preventing the window
-        // and its child WebView2 control from activating or receiving mouse clicks when shown.
         let window = WebviewWindowBuilder::new(
             &self.app,
             "overlay",
@@ -78,26 +78,27 @@ impl OverlayManager {
         #[cfg(debug_assertions)]
         window.open_devtools();
 
-        // Start with click-through disabled (interactive mode)
+        // Configure extended styles without showing the window
         window.set_ignore_cursor_events(false)?;
         Self::apply_win32_cursor_mode(&window, false);
-        info!("set_ignore_cursor_events(false) - click-through disabled initially");
+        Self::hide_win32_window(&window);
+        info!("Overlay initialized hidden with click-through disabled");
 
         self.window = Some(window);
-        info!("Overlay window initialized and stored");
+        self.state = OverlayState::Hidden;
         Ok(())
     }
 
-    /// Ensures the underlying Win32 HWND extended styles (`GWL_EXSTYLE`) and foreground
-    /// activation match the desired click-through state.
+    /// Updates only the Win32 `GWL_EXSTYLE` hit-test flags (`WS_EX_TRANSPARENT`, `WS_EX_NOACTIVATE`)
+    /// WITHOUT changing window visibility (`SWP_SHOWWINDOW` / `ShowWindow`).
     #[cfg(target_os = "windows")]
     fn apply_win32_cursor_mode(window: &tauri::WebviewWindow, click_through: bool) {
         use std::ffi::c_void;
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-            GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-            SWP_SHOWWINDOW, SW_SHOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TRANSPARENT,
+            GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
+            SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WS_EX_LAYERED,
+            WS_EX_NOACTIVATE, WS_EX_TRANSPARENT,
         };
 
         let Ok(raw_hwnd) = window.hwnd() else {
@@ -108,12 +109,9 @@ impl OverlayManager {
         unsafe {
             let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
             let new_style = if click_through {
-                (ex_style
-                    | (WS_EX_TRANSPARENT.0 as isize)
-                    | (WS_EX_LAYERED.0 as isize))
+                (ex_style | (WS_EX_TRANSPARENT.0 as isize) | (WS_EX_LAYERED.0 as isize))
                     & !(WS_EX_NOACTIVATE.0 as isize)
             } else {
-                // Clear both WS_EX_TRANSPARENT and WS_EX_NOACTIVATE so WebView2 receives mouse input
                 (ex_style | (WS_EX_LAYERED.0 as isize))
                     & !(WS_EX_TRANSPARENT.0 as isize)
                     & !(WS_EX_NOACTIVATE.0 as isize)
@@ -128,41 +126,101 @@ impl OverlayManager {
             );
 
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_style);
-
-            if click_through {
-                let _ = SetWindowPos(
-                    hwnd,
-                    HWND_TOPMOST,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-                );
-            } else {
-                let _ = SetWindowPos(
-                    hwnd,
-                    HWND_TOPMOST,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW,
-                );
-                let _ = ShowWindow(hwnd, SW_SHOW);
-                let _ = SetForegroundWindow(hwnd);
-            }
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
         }
     }
 
     #[cfg(not(target_os = "windows"))]
     fn apply_win32_cursor_mode(_window: &tauri::WebviewWindow, _click_through: bool) {}
 
+    /// Explicitly shows and foregrounds the Win32 `HWND` when `show()` is called.
+    #[cfg(target_os = "windows")]
+    fn show_and_focus_win32_window(window: &tauri::WebviewWindow) {
+        use std::ffi::c_void;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_FRAMECHANGED,
+            SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOW,
+        };
+
+        let Ok(raw_hwnd) = window.hwnd() else {
+            return;
+        };
+        let hwnd = HWND(raw_hwnd.0 as *mut c_void);
+
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_SHOW);
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW,
+            );
+            let _ = SetForegroundWindow(hwnd);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn show_and_focus_win32_window(_window: &tauri::WebviewWindow) {}
+
+    /// Explicitly hides the Win32 `HWND` when `hide()` is called.
+    #[cfg(target_os = "windows")]
+    fn hide_win32_window(window: &tauri::WebviewWindow) {
+        use std::ffi::c_void;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
+
+        let Ok(raw_hwnd) = window.hwnd() else {
+            return;
+        };
+        let hwnd = HWND(raw_hwnd.0 as *mut c_void);
+
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn hide_win32_window(_window: &tauri::WebviewWindow) {}
+
     pub async fn toggle(&mut self) {
-        info!("toggle() called, current state: {:?}", self.state);
-        match self.state {
-            OverlayState::Hidden => self.show().await,
-            _ => self.hide().await,
+        // Debounce rapid duplicate triggers (e.g. OS key-repeat or simultaneous global + DOM shortcut)
+        let now = Instant::now();
+        if let Some(last) = self.last_toggle {
+            if now.duration_since(last) < Duration::from_millis(250) {
+                debug!("Ignoring duplicate toggle() within 250ms debounce window");
+                return;
+            }
+        }
+        self.last_toggle = Some(now);
+
+        let os_visible = self
+            .window
+            .as_ref()
+            .and_then(|w| w.is_visible().ok())
+            .unwrap_or(false);
+        let should_hide = self.state != OverlayState::Hidden || os_visible;
+
+        info!(
+            "toggle() called -> state={:?}, os_visible={} => should_hide={}",
+            self.state, os_visible, should_hide
+        );
+
+        if should_hide {
+            self.hide().await;
+        } else {
+            self.show().await;
         }
     }
 
@@ -170,22 +228,17 @@ impl OverlayManager {
         info!("show() called, current state: {:?}", self.state);
         if let Some(w) = &self.window {
             self.click_through = false;
+            self.ensure_monitors_covered().await;
 
-            if self.state == OverlayState::Hidden {
-                info!("State was Hidden, ensuring window covers primary monitor");
-                self.ensure_monitors_covered().await;
-            }
-
-            info!("Calling w.show(), disabling click-through, and focusing window");
             if let Err(e) = w.show() {
                 error!("w.show() failed: {:?}", e);
             }
 
-            // Apply cursor event handling AFTER show() so Win32 & WebView2 controller update while visible
             if let Err(e) = w.set_ignore_cursor_events(false) {
                 error!("w.set_ignore_cursor_events(false) failed: {:?}", e);
             }
             Self::apply_win32_cursor_mode(w, false);
+            Self::show_and_focus_win32_window(w);
 
             if let Err(e) = w.set_focus() {
                 error!("w.set_focus() failed: {:?}", e);
@@ -208,6 +261,7 @@ impl OverlayManager {
     pub async fn hide(&mut self) {
         info!("hide() called, current state: {:?}", self.state);
         if let Some(w) = &self.window {
+            Self::hide_win32_window(w);
             if let Err(e) = w.hide() {
                 error!("w.hide() failed: {:?}", e);
             }
@@ -228,7 +282,6 @@ impl OverlayManager {
     }
 
     pub async fn toggle_click_through(&mut self) {
-        // Only toggle click-through when the overlay is actually visible
         if self.state == OverlayState::Hidden {
             debug!("Ignoring toggle_click_through() while overlay is Hidden");
             return;
