@@ -1580,6 +1580,19 @@
 
     <div class="click-through-indicator" id="ctIndicator">Click-through ON (Ctrl+Shift+X to exit)</div>
   </div>
+  <script>
+    window.addEventListener('pointerdown', (e) => {
+      const topEl = document.elementFromPoint(e.clientX, e.clientY);
+      console.log('[HIT-TEST]', {
+        x: e.clientX,
+        y: e.clientY,
+        target: e.target,
+        elementFromPoint: topEl,
+        pointerEvents: topEl ? getComputedStyle(topEl).pointerEvents : null,
+        zIndex: topEl ? getComputedStyle(topEl).zIndex : null,
+      });
+    }, true);
+  </script>
   <script type="module" src="./main.ts"></script>
 </body>
 

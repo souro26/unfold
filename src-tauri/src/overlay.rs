@@ -73,6 +73,10 @@ impl OverlayManager {
         .build()?;
 
         info!("Window created successfully, label: {:?}", window.label());
+        info!("Overlay WebView URL: {:?}", window.url());
+
+        #[cfg(debug_assertions)]
+        window.open_devtools();
 
         // Start with click-through disabled (interactive mode)
         window.set_ignore_cursor_events(false)?;
@@ -103,12 +107,29 @@ impl OverlayManager {
 
         unsafe {
             let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            if click_through {
-                let new_style = (ex_style
+            let new_style = if click_through {
+                (ex_style
                     | (WS_EX_TRANSPARENT.0 as isize)
                     | (WS_EX_LAYERED.0 as isize))
-                    & !(WS_EX_NOACTIVATE.0 as isize);
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_style);
+                    & !(WS_EX_NOACTIVATE.0 as isize)
+            } else {
+                // Clear both WS_EX_TRANSPARENT and WS_EX_NOACTIVATE so WebView2 receives mouse input
+                (ex_style | (WS_EX_LAYERED.0 as isize))
+                    & !(WS_EX_TRANSPARENT.0 as isize)
+                    & !(WS_EX_NOACTIVATE.0 as isize)
+            };
+
+            tracing::info!(
+                "Win32 GWL_EXSTYLE before={:#010x}, after={:#010x} (WS_EX_TRANSPARENT={}, WS_EX_NOACTIVATE={})",
+                ex_style,
+                new_style,
+                (new_style & (WS_EX_TRANSPARENT.0 as isize)) != 0,
+                (new_style & (WS_EX_NOACTIVATE.0 as isize)) != 0,
+            );
+
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_style);
+
+            if click_through {
                 let _ = SetWindowPos(
                     hwnd,
                     HWND_TOPMOST,
@@ -119,11 +140,6 @@ impl OverlayManager {
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
                 );
             } else {
-                // Clear both WS_EX_TRANSPARENT and WS_EX_NOACTIVATE so WebView2 receives mouse input
-                let new_style = (ex_style | (WS_EX_LAYERED.0 as isize))
-                    & !(WS_EX_TRANSPARENT.0 as isize)
-                    & !(WS_EX_NOACTIVATE.0 as isize);
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_style);
                 let _ = SetWindowPos(
                     hwnd,
                     HWND_TOPMOST,
@@ -174,6 +190,9 @@ impl OverlayManager {
             if let Err(e) = w.set_focus() {
                 error!("w.set_focus() failed: {:?}", e);
             }
+
+            #[cfg(debug_assertions)]
+            w.open_devtools();
 
             self.state = OverlayState::Visible;
             self.app.emit("overlay:visibility-changed", true).ok();
