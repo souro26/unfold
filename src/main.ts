@@ -125,7 +125,18 @@ const vizCanvas = document.getElementById('vizCanvas') as HTMLCanvasElement;
 const ctIndicator = document.getElementById('ctIndicator')!;
 const tint = document.getElementById('tint');
 
+// Screen Overlay Mode Top Bar Buttons
+const overlayRetakeBtn = document.getElementById('overlayRetakeBtn');
+const overlayDrawBtn = document.getElementById('overlayDrawBtn');
+const overlayDrawLabel = document.getElementById('overlayDrawLabel');
+const overlayClickThroughBtn = document.getElementById('overlayClickThroughBtn');
+const overlayCtLabel = document.getElementById('overlayCtLabel');
+const overlayExitBtn = document.getElementById('overlayExitBtn');
+
 let clickThrough = false;
+let isDrawingOnScreen = false;
+let activeScreenOverlayMode = false;
+let latestScreenContext: string | null = null;
 let tintOpacity = 0;
 let _skia: any = null;
 let useSkia = false;
@@ -297,6 +308,20 @@ sidebarToggle.addEventListener('click', () => {
 
 const clickThroughToggle = document.getElementById('clickThroughToggle')!;
 const ctStatus = document.getElementById('ctStatus')!;
+
+function updateOverlayClickThroughUI() {
+  overlayClickThroughBtn?.classList.toggle('active', clickThrough);
+  if (overlayCtLabel) {
+    overlayCtLabel.textContent = clickThrough ? 'Click-Through: ON' : 'Click-Through: OFF';
+  }
+}
+
+function updateOverlayDrawBtnUI() {
+  overlayDrawBtn?.classList.toggle('active', isDrawingOnScreen);
+  if (overlayDrawLabel) {
+    overlayDrawLabel.textContent = isDrawingOnScreen ? 'Drawing: ON' : 'Draw';
+  }
+}
 
 function updateClickThroughUI() {
   clickThroughToggle.classList.toggle('active', clickThrough);
@@ -660,9 +685,6 @@ blackboardBtn.addEventListener('click', () => {
 
 let screenTeachState: 'idle' | 'selecting_monitor' | 'capturing' | 'analyzing' = 'idle';
 let selectedMonitorIndex = 0;
-let activeScreenOverlayMode = false;
-let latestScreenContext: string | null = null;
-let isDrawingOnScreen = false;
 
 async function enterScreenTeachMode() {
   console.log('enterScreenTeachMode called, state:', screenTeachState);
@@ -693,14 +715,6 @@ function exitScreenOverlayMode() {
   updateOverlayDrawBtnUI();
 }
 
-// Screen Overlay Mode Top Bar Buttons
-const overlayRetakeBtn = document.getElementById('overlayRetakeBtn');
-const overlayDrawBtn = document.getElementById('overlayDrawBtn');
-const overlayDrawLabel = document.getElementById('overlayDrawLabel');
-const overlayClickThroughBtn = document.getElementById('overlayClickThroughBtn');
-const overlayCtLabel = document.getElementById('overlayCtLabel');
-const overlayExitBtn = document.getElementById('overlayExitBtn');
-
 overlayRetakeBtn?.addEventListener('click', async () => {
   await captureAndAnalyzeScreen(selectedMonitorIndex, 'Analyze what is currently on my screen and answer any visible issues.');
 });
@@ -711,25 +725,11 @@ overlayDrawBtn?.addEventListener('click', () => {
   updateOverlayDrawBtnUI();
 });
 
-function updateOverlayDrawBtnUI() {
-  overlayDrawBtn?.classList.toggle('active', isDrawingOnScreen);
-  if (overlayDrawLabel) {
-    overlayDrawLabel.textContent = isDrawingOnScreen ? 'Drawing: ON' : 'Draw';
-  }
-}
-
 overlayClickThroughBtn?.addEventListener('click', async () => {
   const next = !clickThrough;
   clickThrough = await invoke<boolean>('set_click_through', { enabled: next });
   updateClickThroughUI();
 });
-
-function updateOverlayClickThroughUI() {
-  overlayClickThroughBtn?.classList.toggle('active', clickThrough);
-  if (overlayCtLabel) {
-    overlayCtLabel.textContent = clickThrough ? 'Click-Through: ON' : 'Click-Through: OFF';
-  }
-}
 
 overlayExitBtn?.addEventListener('click', exitScreenOverlayMode);
 
