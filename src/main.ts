@@ -521,12 +521,33 @@ async function sendMessage() {
     currentConversationId = await createNewConversation(text);
   }
 
-  const userMsg: Message = { role: 'user', content: text, timestamp: Date.now() };
+  let screenImageBase64: string | undefined = undefined;
+  if (activeScreenOverlayMode) {
+    try {
+      const captureResult = await invoke<ScreenCaptureResponse>('capture_screen', {
+        request: {
+          region: { x: selectedMonitorIndex, y: 0, width: 0, height: 0 },
+          include_cursor: false
+        }
+      });
+      screenImageBase64 = captureResult.image_base64;
+      latestScreenContext = captureResult.image_base64;
+    } catch (err) {
+      console.warn('Screen capture failed:', err);
+    }
+  }
+
+  const userMsg: Message = { 
+    role: 'user', 
+    content: text, 
+    timestamp: Date.now(),
+    image_base64: screenImageBase64 
+  };
   addMessageToConversation(currentConversationId, userMsg);
   appendMessage(userMsg);
   scrollToBottom();
 
-  await sendToAI(text);
+  await sendToAI(text, screenImageBase64);
 }
 
 function addMessageToConversation(convId: string, msg: Message) {
@@ -544,7 +565,7 @@ function hideEmptyState() {
   messagesContainer.classList.add('visible');
 }
 
-async function sendToAI(prompt: string) {
+async function sendToAI(prompt: string, screenImageBase64?: string) {
   isStreaming = true;
   currentStreamController = new AbortController();
   sendBtn.disabled = true;
@@ -556,14 +577,15 @@ async function sendToAI(prompt: string) {
   appendStreamingPlaceholder();
 
   try {
+    const imgToSend = screenImageBase64 || ((activeScreenOverlayMode && latestScreenContext) ? latestScreenContext : undefined);
     const response = await invoke<string>('send_message', {
       prompt,
       conversation_id: currentConversationId,
-      image_base64: (activeScreenOverlayMode && latestScreenContext) ? latestScreenContext : undefined,
+      image_base64: imgToSend,
       request: {
         prompt,
         conversation_id: currentConversationId,
-        image_base64: (activeScreenOverlayMode && latestScreenContext) ? latestScreenContext : undefined
+        image_base64: imgToSend
       }
     });
 
@@ -690,20 +712,20 @@ async function enterScreenTeachMode() {
   console.log('enterScreenTeachMode called, state:', screenTeachState);
   if (screenTeachState !== 'idle') return;
 
-  // Pick up any question user already typed in composerInput
-  const existingQuestion = composerInput.value.trim();
-  if (existingQuestion) {
-    composerInput.value = '';
-    autoResizeTextarea(composerInput);
-  }
-
-  // Transform Unfold into a transparent overlay on the user's desktop!
+  // Transform Unfold into a see-through tinted overlay on the user's desktop!
   document.body.classList.add('screen-overlay-mode');
   document.querySelector('.app')?.classList.add('screen-overlay-mode');
   activeScreenOverlayMode = true;
   hideEmptyState();
 
-  await captureAndAnalyzeScreen(selectedMonitorIndex, existingQuestion || undefined);
+  composerInput.placeholder = "Ask anything about what's on your screen… (Esc to exit)";
+  composerInput.focus();
+
+  // If user already typed something in composerInput, send it with screen context!
+  const existingQuestion = composerInput.value.trim();
+  if (existingQuestion) {
+    await sendMessage();
+  }
 }
 
 function exitScreenOverlayMode() {
@@ -712,8 +734,16 @@ function exitScreenOverlayMode() {
   document.body.classList.remove('screen-overlay-mode');
   document.body.classList.remove('drawing-active');
   document.querySelector('.app')?.classList.remove('screen-overlay-mode');
+  composerInput.placeholder = 'Message Unfold…';
   updateOverlayDrawBtnUI();
+  const conv = conversations.find(c => c.id === currentConversationId);
+  if (!conv || conv.messages.length === 0) {
+    showEmptyState();
+  }
 }
+
+const overlayCloseTrigger = document.getElementById('overlayCloseTrigger');
+overlayCloseTrigger?.addEventListener('click', exitScreenOverlayMode);
 
 overlayRetakeBtn?.addEventListener('click', async () => {
   await captureAndAnalyzeScreen(selectedMonitorIndex, 'Analyze what is currently on my screen and answer any visible issues.');
@@ -1398,14 +1428,11 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
-    if (e.key === 'Escape') {
-      (e.target as HTMLElement).blur();
-    }
-    return;
-  }
-
   if (e.key === 'Escape') {
+    if (activeScreenOverlayMode) {
+      exitScreenOverlayMode();
+      return;
+    }
     const modal = document.querySelector('.modal-overlay');
     if (modal) {
       modal.remove();
@@ -1415,6 +1442,10 @@ document.addEventListener('keydown', (e) => {
       vizOverlay.classList.remove('visible');
       return;
     }
+  }
+
+  if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
+    return;
   }
 
   if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
