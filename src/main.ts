@@ -88,7 +88,7 @@ interface UsageInfo {
   total_tokens?: number;
 }
 
-interface MonitorInfo {
+export interface MonitorInfo {
   index: number;
   name: string;
   width: number;
@@ -303,7 +303,8 @@ function updateClickThroughUI() {
   ctStatus.textContent = clickThrough ? 'ON' : 'OFF';
   ctStatus.classList.toggle('bg-teal', clickThrough);
   ctStatus.classList.toggle('bg-red', !clickThrough);
-  clickThroughToggle.title = `Click-through: ${clickThrough ? 'ON' : 'OFF'} (Esc to toggle)`;
+  clickThroughToggle.title = `Click-through: ${clickThrough ? 'ON' : 'OFF'} (Ctrl+Shift+X to toggle)`;
+  updateOverlayClickThroughUI();
 }
 
 clickThroughToggle.addEventListener('click', async () => {
@@ -406,6 +407,20 @@ function appendMessage(msg: Message) {
   const div = document.createElement('div');
   div.className = 'message ' + msg.role;
   div.dataset.msgId = String(msg.timestamp);
+
+  const imageHtml = msg.image_base64 ? `
+    <div class="screen-context-card">
+      <img class="screen-context-thumb" src="data:image/png;base64,${msg.image_base64}" alt="Screen Context" title="Click to open full snapshot" onclick="window.open('data:image/png;base64,${msg.image_base64}', '_blank')"/>
+      <div class="screen-context-details">
+        <div class="screen-context-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+          Active Screen Context
+        </div>
+        <div class="screen-context-subtitle">Screen snapshot attached to this question</div>
+      </div>
+    </div>
+  ` : '';
+
   div.innerHTML = `
     <div class="message-avatar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -419,6 +434,7 @@ function appendMessage(msg: Message) {
         <span class="role">${msg.role === 'user' ? 'You' : 'Unfold'}</span>
         <span class="time">${formatTime(msg.timestamp)}</span>
       </div>
+      ${imageHtml}
       <div class="message-text">${renderMarkdown(msg.content)}</div>
     </div>
   `;
@@ -518,9 +534,11 @@ async function sendToAI(prompt: string) {
     const response = await invoke<string>('send_message', {
       prompt,
       conversation_id: currentConversationId,
+      image_base64: (activeScreenOverlayMode && latestScreenContext) ? latestScreenContext : undefined,
       request: {
         prompt,
-        conversation_id: currentConversationId
+        conversation_id: currentConversationId,
+        image_base64: (activeScreenOverlayMode && latestScreenContext) ? latestScreenContext : undefined
       }
     });
 
@@ -642,151 +660,138 @@ blackboardBtn.addEventListener('click', () => {
 
 let screenTeachState: 'idle' | 'selecting_monitor' | 'capturing' | 'analyzing' = 'idle';
 let selectedMonitorIndex = 0;
+let activeScreenOverlayMode = false;
+let latestScreenContext: string | null = null;
+let isDrawingOnScreen = false;
 
 async function enterScreenTeachMode() {
   console.log('enterScreenTeachMode called, state:', screenTeachState);
   if (screenTeachState !== 'idle') return;
-  
-  screenTeachState = 'selecting_monitor';
-  console.log('State changed to selecting_monitor, calling hideEmptyState');
+
+  // Pick up any question user already typed in composerInput
+  const existingQuestion = composerInput.value.trim();
+  if (existingQuestion) {
+    composerInput.value = '';
+    autoResizeTextarea(composerInput);
+  }
+
+  // Transform Unfold into a transparent overlay on the user's desktop!
+  document.body.classList.add('screen-overlay-mode');
+  document.querySelector('.app')?.classList.add('screen-overlay-mode');
+  activeScreenOverlayMode = true;
   hideEmptyState();
-  
-  // Show monitor selection UI
-  await showMonitorSelection();
+
+  await captureAndAnalyzeScreen(selectedMonitorIndex, existingQuestion || undefined);
 }
 
-async function showMonitorSelection() {
-  try {
-    const monitors = await invoke<MonitorInfo[]>('list_monitors');
-    
-    // Create monitor selection modal
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-      <div class="modal monitor-selection">
-        <div class="modal-header">
-          <h3>Teach me what's on my screen</h3>
-          <button class="modal-close">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p class="modal-desc">Select which screen to capture and analyze:</p>
-          <div class="monitor-grid" id="monitorGrid">
-            ${monitors.map((m, i) => `
-              <button class="monitor-card ${m.is_primary ? 'primary' : ''}" data-index="${i}">
-                <div class="monitor-preview">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <rect x="2" y="3" width="20" height="14" rx="2"/>
-                    <path d="M8 21h8"/><path d="M12 17v4"/>
-                  </svg>
-                </div>
-                <div class="monitor-info">
-                  <span class="monitor-name">${escapeHtml(m.name)}</span>
-                  <span class="monitor-res">${m.width}×${m.height}</span>
-                  ${m.is_primary ? '<span class="primary-badge">Primary</span>' : ''}
-                </div>
-              </button>
-            `).join('')}
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" id="cancelMonitorBtn">Cancel</button>
-          <button class="btn-primary" id="captureMonitorBtn" disabled>Capture & Analyze</button>
-        </div>
-      </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Handle monitor selection
-    const monitorCards = modal.querySelectorAll('.monitor-card');
-    const captureBtn = modal.querySelector('#captureMonitorBtn') as HTMLButtonElement;
-    const cancelBtn = modal.querySelector('#cancelMonitorBtn') as HTMLButtonElement;
-    const closeBtn = modal.querySelector('.modal-close') as HTMLButtonElement;
-    
-    monitorCards.forEach(card => {
-      card.addEventListener('click', () => {
-        monitorCards.forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        selectedMonitorIndex = parseInt((card as HTMLElement).dataset.index!);
-        captureBtn.disabled = false;
-      });
-    });
-    
-    const cleanup = () => {
-      modal.remove();
-      screenTeachState = 'idle';
-    };
-    
-    captureBtn.addEventListener('click', async () => {
-      cleanup();
-      await captureAndAnalyzeScreen(selectedMonitorIndex);
-    });
-    
-    cancelBtn.addEventListener('click', cleanup);
-    closeBtn.addEventListener('click', cleanup);
-    
-    // Auto-select primary monitor
-    const primaryCard = modal.querySelector('.monitor-card.primary') as HTMLButtonElement;
-    if (primaryCard) {
-      primaryCard.click();
-    }
-    
-  } catch (error) {
-    console.error('Failed to list monitors:', error);
-    screenTeachState = 'idle';
-    // Fallback - just capture primary
-    await captureAndAnalyzeScreen(0);
+function exitScreenOverlayMode() {
+  activeScreenOverlayMode = false;
+  isDrawingOnScreen = false;
+  document.body.classList.remove('screen-overlay-mode');
+  document.body.classList.remove('drawing-active');
+  document.querySelector('.app')?.classList.remove('screen-overlay-mode');
+  updateOverlayDrawBtnUI();
+}
+
+// Screen Overlay Mode Top Bar Buttons
+const overlayRetakeBtn = document.getElementById('overlayRetakeBtn');
+const overlayDrawBtn = document.getElementById('overlayDrawBtn');
+const overlayDrawLabel = document.getElementById('overlayDrawLabel');
+const overlayClickThroughBtn = document.getElementById('overlayClickThroughBtn');
+const overlayCtLabel = document.getElementById('overlayCtLabel');
+const overlayExitBtn = document.getElementById('overlayExitBtn');
+
+overlayRetakeBtn?.addEventListener('click', async () => {
+  await captureAndAnalyzeScreen(selectedMonitorIndex, 'Analyze what is currently on my screen and answer any visible issues.');
+});
+
+overlayDrawBtn?.addEventListener('click', () => {
+  isDrawingOnScreen = !isDrawingOnScreen;
+  document.body.classList.toggle('drawing-active', isDrawingOnScreen);
+  updateOverlayDrawBtnUI();
+});
+
+function updateOverlayDrawBtnUI() {
+  overlayDrawBtn?.classList.toggle('active', isDrawingOnScreen);
+  if (overlayDrawLabel) {
+    overlayDrawLabel.textContent = isDrawingOnScreen ? 'Drawing: ON' : 'Draw';
   }
 }
 
-async function captureAndAnalyzeScreen(monitorIndex: number) {
-  if (screenTeachState !== 'idle') return;
+overlayClickThroughBtn?.addEventListener('click', async () => {
+  const next = !clickThrough;
+  clickThrough = await invoke<boolean>('set_click_through', { enabled: next });
+  updateClickThroughUI();
+});
+
+function updateOverlayClickThroughUI() {
+  overlayClickThroughBtn?.classList.toggle('active', clickThrough);
+  if (overlayCtLabel) {
+    overlayCtLabel.textContent = clickThrough ? 'Click-Through: ON' : 'Click-Through: OFF';
+  }
+}
+
+overlayExitBtn?.addEventListener('click', exitScreenOverlayMode);
+
+async function captureAndAnalyzeScreen(monitorIndex: number, userQuestion?: string) {
+  if (screenTeachState === 'capturing' || screenTeachState === 'analyzing') return;
   screenTeachState = 'capturing';
-  
-  // Show capturing indicator
+
   const capturingDiv = document.createElement('div');
   capturingDiv.className = 'capturing-overlay';
   capturingDiv.innerHTML = `
     <div class="capturing-content">
       <div class="spinner"></div>
-      <p>Capturing screen...</p>
+      <p id="capturingStatusText">Scanning your screen context...</p>
     </div>
   `;
   document.body.appendChild(capturingDiv);
-  
+
   try {
-    // Capture screen
     const captureResult = await invoke<ScreenCaptureResponse>('capture_screen', {
       request: {
-        region: { x: monitorIndex, y: 0, width: 0, height: 0 }, // 0,0,0,0 means full monitor
+        region: { x: monitorIndex, y: 0, width: 0, height: 0 },
         include_cursor: false
       }
     });
-    
-    capturingDiv.innerHTML = `
-      <div class="capturing-content">
-        <div class="spinner"></div>
-        <p>Analyzing with AI...</p>
-      </div>
-    `;
-    
+
+    latestScreenContext = captureResult.image_base64;
+
+    const statusText = capturingDiv.querySelector('#capturingStatusText');
+    if (statusText) statusText.textContent = 'Analyzing screen with AI...';
     screenTeachState = 'analyzing';
-    
-    // Get current settings for vision API
+
     const settings = await invoke<{llm_provider: string, api_key: string | null, model: string}>('get_settings');
-    
     if (!settings.api_key) {
-      throw new Error('No API key configured. Please set your API key in settings.');
+      throw new Error('No API key configured. Please configure your API key in Settings.');
     }
-    
-    // Call vision API
+
+    if (!currentConversationId) {
+      currentConversationId = await createNewConversation(userQuestion ? `Screen: ${userQuestion.slice(0, 20)}...` : 'Screen Analysis');
+    }
+
+    const promptText = userQuestion || 'Teach me what is on my screen step by step.';
+    const userMsg: Message = {
+      role: 'user',
+      content: `📸 **Screen Context Captured**\n\n"${promptText}"`,
+      timestamp: Date.now(),
+      image_base64: captureResult.image_base64
+    };
+    addMessageToConversation(currentConversationId, userMsg);
+    appendMessage(userMsg);
+    scrollToBottom();
+
+    const visionPrompt = userQuestion
+      ? `[User Screen Context Question]: ${userQuestion}\n\nContext: The user is looking at this screen. Analyze what is shown and provide a clear, direct, and comprehensive answer to their question.`
+      : 'Teach me what is on this screen. Break down what you see clearly, explain the key elements step by step, and provide practical insights.';
+
     const visionResult = await invoke<VisionResponse>('capture_screen_with_vision', {
       request: {
         region: { x: monitorIndex, y: 0, width: 0, height: 0 },
         include_cursor: false
       },
       vision_request: {
-        prompt: 'Teach me what is on this screen. Explain it clearly as if I am learning this concept.',
+        prompt: visionPrompt,
         image_base64: captureResult.image_base64,
         model: settings.model,
         provider: settings.llm_provider,
@@ -794,58 +799,66 @@ async function captureAndAnalyzeScreen(monitorIndex: number) {
         conversation_history: currentConversationId ? getConversationHistory() : undefined
       }
     });
-    
+
     capturingDiv.remove();
     screenTeachState = 'idle';
-    
-    // Send to chat as a message
-    if (!currentConversationId) {
-      currentConversationId = await createNewConversation('Screen Analysis');
-    }
-    
-    // Add user message with image reference
-    const userMsg: Message = { 
-      role: 'user', 
-      content: `📸 **Screen Capture** (Monitor ${monitorIndex + 1}): Teach me what is on my screen`,
-      timestamp: Date.now(),
-      image_base64: captureResult.image_base64
-    };
-    addMessageToConversation(currentConversationId, userMsg);
-    appendMessage(userMsg);
-    
-    // Add AI response
-    const assistantMsg: Message = { 
-      role: 'assistant', 
+
+    const assistantMsg: Message = {
+      role: 'assistant',
       content: visionResult.content,
       timestamp: Date.now()
     };
     addMessageToConversation(currentConversationId, assistantMsg);
     appendMessage(assistantMsg);
     scrollToBottom();
-    
-    // Offer to open blackboard for visualization
+
+    renderScreenFollowupChips();
+
     setTimeout(() => {
       offerBlackboardFollowup(visionResult.content);
-    }, 500);
-    
+    }, 600);
+
   } catch (error) {
     capturingDiv.remove();
     screenTeachState = 'idle';
     console.error('Screen teach failed:', error);
-    
-    // Show error in chat
-    const errorMsg: Message = { 
-      role: 'assistant', 
+
+    const errorMsg: Message = {
+      role: 'assistant',
       content: `❌ Screen analysis failed: ${error instanceof Error ? error.message : String(error)}`,
       timestamp: Date.now()
     };
-    if (!currentConversationId) {
-      currentConversationId = await createNewConversation('Screen Analysis (Failed)');
+    if (currentConversationId) {
+      addMessageToConversation(currentConversationId, errorMsg);
+      appendMessage(errorMsg);
+      scrollToBottom();
     }
-    addMessageToConversation(currentConversationId, errorMsg);
-    appendMessage(errorMsg);
-    scrollToBottom();
   }
+}
+
+function renderScreenFollowupChips() {
+  const chipsDiv = document.createElement('div');
+  chipsDiv.className = 'screen-prompt-chips';
+  chipsDiv.innerHTML = `
+    <button class="screen-chip" data-prompt="Explain this error or bug in detail">🐛 Explain Error</button>
+    <button class="screen-chip" data-prompt="Step by step tutorial on what to do next with this">📋 What do I do next?</button>
+    <button class="screen-chip" data-prompt="Summarize the key information on this screen">📝 Summarize Screen</button>
+    <button class="screen-chip" data-prompt="Draw and visualize the architecture or flow of this">🎨 Visualize this</button>
+  `;
+
+  chipsDiv.querySelectorAll('.screen-chip').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const p = (btn as HTMLElement).dataset.prompt;
+      if (p) {
+        chipsDiv.remove();
+        composerInput.value = p;
+        await sendMessage();
+      }
+    });
+  });
+
+  messagesContainer.appendChild(chipsDiv);
+  scrollToBottom();
 }
 
 function getConversationHistory(): ChatMessage[] {
@@ -1049,9 +1062,11 @@ async function sendToAIWithBlackboardContext(prompt: string) {
     const response = await invoke<string>('send_message', {
       prompt: enhancedPrompt,
       conversation_id: currentConversationId,
+      image_base64: (activeScreenOverlayMode && latestScreenContext) ? latestScreenContext : undefined,
       request: {
         prompt: enhancedPrompt,
-        conversation_id: currentConversationId
+        conversation_id: currentConversationId,
+        image_base64: (activeScreenOverlayMode && latestScreenContext) ? latestScreenContext : undefined
       }
     });
 

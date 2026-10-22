@@ -81,12 +81,31 @@ impl OverlayManager {
         // Configure extended styles without showing the window
         window.set_ignore_cursor_events(false)?;
         Self::apply_win32_cursor_mode(&window, false);
+        #[cfg(target_os = "windows")]
+        Self::setup_window_capture_affinity(&window);
         Self::hide_win32_window(&window);
         info!("Overlay initialized hidden with click-through disabled");
 
         self.window = Some(window);
         self.state = OverlayState::Hidden;
         Ok(())
+    }
+
+    /// Exclude the overlay window itself from desktop screen capture
+    #[cfg(target_os = "windows")]
+    fn setup_window_capture_affinity(window: &tauri::WebviewWindow) {
+        use std::ffi::c_void;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE};
+
+        let Ok(raw_hwnd) = window.hwnd() else {
+            return;
+        };
+        let hwnd = HWND(raw_hwnd.0 as *mut c_void);
+
+        unsafe {
+            let _ = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+        }
     }
 
     /// Updates only the Win32 `GWL_EXSTYLE` hit-test flags (`WS_EX_TRANSPARENT`, `WS_EX_NOACTIVATE`)

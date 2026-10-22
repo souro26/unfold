@@ -1408,10 +1408,302 @@
     .bg-tint {
       background: rgba(0, 0, 0, 0.25) !important;
     }
+
+    /* ── Screen Overlay Mode ────────────────────────────────────── */
+    body.screen-overlay-mode,
+    body.screen-overlay-mode html {
+      background: transparent !important;
+    }
+
+    body.screen-overlay-mode .app {
+      background: transparent !important;
+      pointer-events: none;
+    }
+
+    /* Screen overlay top control bar */
+    .screen-overlay-bar {
+      display: none;
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 500;
+      background: rgba(22, 22, 26, 0.94);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 30px;
+      padding: 6px 14px;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      pointer-events: auto;
+      animation: fadeInDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translate(-50%, -10px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+
+    body.screen-overlay-mode .screen-overlay-bar {
+      display: flex;
+    }
+
+    .overlay-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #00d4aa;
+      padding-right: 8px;
+      border-right: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00d4aa;
+      box-shadow: 0 0 8px #00d4aa;
+      animation: pulseGlow 1.8s infinite;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .overlay-bar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .overlay-action-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #ECECEC;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .overlay-action-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .overlay-action-btn.active {
+      background: rgba(0, 212, 170, 0.2);
+      border-color: #00d4aa;
+      color: #00d4aa;
+    }
+
+    .overlay-action-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .overlay-close-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: transparent;
+      border: none;
+      color: #A0A0A0;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .overlay-close-btn:hover {
+      background: rgba(255, 80, 80, 0.2);
+      color: #ff6b6b;
+    }
+
+    /* In screen overlay mode, hide sidebar to reveal desktop */
+    body.screen-overlay-mode .sidebar {
+      display: none !important;
+    }
+
+    /* In screen overlay mode, main becomes a floating glass HUD on the right */
+    body.screen-overlay-mode .main {
+      position: fixed;
+      right: 20px;
+      top: 65px;
+      bottom: 24px;
+      width: 460px;
+      max-width: 92vw;
+      background: rgba(22, 22, 26, 0.90) !important;
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+      pointer-events: auto;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(40px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    body.screen-overlay-mode .conversation-area {
+      padding: 16px 18px;
+    }
+
+    body.screen-overlay-mode .composer {
+      background: rgba(18, 18, 22, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 0 0 20px 20px;
+      padding: 12px 16px;
+    }
+
+    body.screen-overlay-mode .composer-wrapper {
+      background: rgba(30, 30, 35, 0.8);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    body.screen-overlay-mode #canvas {
+      display: block !important;
+      pointer-events: none;
+    }
+
+    body.screen-overlay-mode.drawing-active #canvas {
+      pointer-events: auto !important;
+    }
+
+    /* Screen Context Card in chat */
+    .screen-context-card {
+      background: rgba(30, 30, 35, 0.85);
+      border: 1px solid rgba(0, 212, 170, 0.35);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .screen-context-thumb {
+      width: 80px;
+      height: 52px;
+      border-radius: 6px;
+      object-fit: cover;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    .screen-context-thumb:hover {
+      transform: scale(1.05);
+    }
+
+    .screen-context-details {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .screen-context-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #00d4aa;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .screen-context-subtitle {
+      font-size: 11px;
+      color: #888;
+    }
+
+    /* Quick suggestion prompt chips */
+    .screen-prompt-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .screen-chip {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: #ECECEC;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .screen-chip:hover {
+      background: rgba(0, 212, 170, 0.18);
+      border-color: #00d4aa;
+      color: #00d4aa;
+      transform: translateY(-1px);
+    }
   </style>
 </head>
 
 <body>
+  <!-- Top Screen Overlay Control Bar (Visible in Screen Overlay Mode) -->
+  <div class="screen-overlay-bar" id="screenOverlayBar">
+    <div class="overlay-badge">
+      <span class="pulse-dot"></span>
+      <span>Screen Teach Overlay</span>
+    </div>
+    <div class="overlay-bar-actions">
+      <button class="overlay-action-btn" id="overlayRetakeBtn" title="Capture fresh screen state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <span>Retake</span>
+      </button>
+      <button class="overlay-action-btn" id="overlayDrawBtn" title="Toggle freehand drawing on screen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+          <path d="M2 2l7.586 7.586"/>
+        </svg>
+        <span id="overlayDrawLabel">Draw</span>
+      </button>
+      <button class="overlay-action-btn" id="overlayClickThroughBtn" title="Interact with desktop underneath (Ctrl+Shift+X)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M8 12h8"/>
+        </svg>
+        <span id="overlayCtLabel">Click-Through: OFF</span>
+      </button>
+      <button class="overlay-close-btn" id="overlayExitBtn" title="Exit Overlay Mode">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
   <!-- Main drawing canvas (for freehand drawing over screen) -->
   <canvas id="canvas" class="pointer-none"></canvas>
 

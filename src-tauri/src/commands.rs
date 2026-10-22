@@ -30,6 +30,8 @@ pub struct SendMessageRequest {
     pub prompt: String,
     #[serde(default)]
     pub conversation_id: Option<String>,
+    #[serde(default)]
+    pub image_base64: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -145,6 +147,7 @@ pub async fn send_message(
     state: State<'_, crate::commands::AppState>,
     prompt: Option<String>,
     conversation_id: Option<String>,
+    image_base64: Option<String>,
     request: Option<SendMessageRequest>,
 ) -> Result<String, String> {
     let settings = state.settings.read().unwrap().clone();
@@ -156,8 +159,26 @@ pub async fn send_message(
         .or_else(|| request.as_ref().map(|r| r.prompt.clone()))
         .ok_or_else(|| "Missing required parameter `prompt`".to_string())?;
     let _conversation_id = conversation_id
-        .or_else(|| request.and_then(|r| r.conversation_id));
+        .or_else(|| request.as_ref().and_then(|r| r.conversation_id.clone()));
+    let img = image_base64
+        .or_else(|| request.as_ref().and_then(|r| r.image_base64.clone()));
     let model = settings.model.clone();
+    
+    // If screen image context is attached, dispatch to vision pipeline
+    if let Some(image_data) = img {
+        if !image_data.is_empty() {
+            let vision_req = crate::screen_capture::VisionRequest {
+                prompt,
+                image_base64: image_data,
+                model,
+                provider: settings.llm_provider,
+                api_key: Some(api_key),
+                conversation_history: None,
+            };
+            let vision_resp = crate::screen_capture::call_vision_api(vision_req).await?;
+            return Ok(vision_resp.content);
+        }
+    }
     
     let system_prompt = r#"You are Unfold, an AI teaching assistant that explains concepts clearly and creates interactive visualizations.
 
@@ -366,7 +387,7 @@ pub async fn update_settings(state: State<'_, crate::commands::AppState>, settin
 #[command]
 pub async fn capture_screen(
     state: State<'_, crate::commands::AppState>,
-    request: ScreenCaptureRequest
+    request: Option<ScreenCaptureRequest>,
 ) -> Result<ScreenCaptureResponse, String> {
     let permission = {
         let settings = state.settings.read().unwrap();
@@ -377,7 +398,11 @@ pub async fn capture_screen(
         return Err("Screen capture permission not granted. Please enable it in settings.".to_string());
     }
 
-    crate::screen_capture::capture_screen_impl(request).await
+    let req = request.unwrap_or(ScreenCaptureRequest {
+        region: None,
+        include_cursor: false,
+    });
+    crate::screen_capture::capture_screen_impl(req).await
 }
 
 #[command]
