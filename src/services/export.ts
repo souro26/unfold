@@ -1,4 +1,4 @@
-import { BlackboardStep, DrawingElement } from '../types';
+import { BlackboardStep } from '../types';
 
 export class ExportService {
   /**

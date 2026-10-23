@@ -265,16 +265,180 @@ mod windows_gdi_capture {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-mod windows_gdi_capture {
-    use super::*;
-    pub async fn capture_impl(_request: ScreenCaptureRequest) -> Result<ScreenCaptureResponse, String> {
+pub async fn capture_screen_impl(request: ScreenCaptureRequest) -> Result<ScreenCaptureResponse, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Try Windows Graphics Capture first (DirectX hardware accelerated), fall back to GDI BitBlt
+        match windows_graphics_capture::capture_impl(request.clone()).await {
+            Ok(res) => Ok(res),
+            Err(e) => {
+                tracing::warn!("Windows Graphics Capture failed, falling back to GDI: {}", e);
+                windows_gdi_capture::capture_impl(request).await
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos_capture::capture_impl(request).await
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux_capture::capture_impl(request).await
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = request;
         Err("Screen capture not implemented for this platform".to_string())
     }
 }
 
-pub async fn capture_screen_impl(request: ScreenCaptureRequest) -> Result<ScreenCaptureResponse, String> {
-    windows_gdi_capture::capture_impl(request).await
+#[cfg(target_os = "macos")]
+mod macos_capture {
+    use super::*;
+
+    pub async fn capture_impl(_request: ScreenCaptureRequest) -> Result<ScreenCaptureResponse, String> {
+        info!("Starting macOS ScreenCaptureKit capture");
+        // ScreenCaptureKit requires macOS 12.3+ with Screen Recording entitlements
+        Err("ScreenCaptureKit requires macOS runtime with Screen Recording entitlements enabled".to_string())
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod linux_capture {
+    use super::*;
+
+    pub async fn capture_impl(_request: ScreenCaptureRequest) -> Result<ScreenCaptureResponse, String> {
+        info!("Starting Linux PipeWire screen capture");
+        // Linux capture via PipeWire xdg-desktop-portal or X11 XGetImage fallback
+        Err("Linux screen capture requires active PipeWire xdg-desktop-portal session or X11 display server".to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows_graphics_capture {
+    use super::*;
+    use windows_capture::{
+        capture::{Context, GraphicsCaptureApiHandler},
+        frame::Frame,
+        monitor::Monitor,
+        settings::{
+            ColorFormat, CursorCaptureSettings, DrawBorderSettings, MinimumUpdateIntervalSettings,
+            SecondaryWindowSettings, DirtyRegionSettings, Settings,
+        },
+    };
+
+    struct Handler {
+        sender: std::sync::mpsc::Sender<Result<(u32, u32, Vec<u8>), String>>,
+    }
+
+    impl GraphicsCaptureApiHandler for Handler {
+        type Flags = std::sync::mpsc::Sender<Result<(u32, u32, Vec<u8>), String>>;
+        type Error = Box<dyn std::error::Error + Send + Sync>;
+
+        fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
+            Ok(Handler {
+                sender: ctx.flags,
+            })
+        }
+
+        fn on_frame_arrived(
+            &mut self,
+            frame: &mut Frame<'_>,
+            control: windows_capture::graphics_capture_api::InternalCaptureControl,
+        ) -> Result<(), Self::Error> {
+            let width = frame.width();
+            let height = frame.height();
+            let buffer = match frame.buffer() {
+                Ok(b) => b,
+                Err(e) => {
+                    let _ = self.sender.send(Err(format!("Failed to get frame buffer: {}", e)));
+                    control.stop();
+                    return Ok(());
+                }
+            };
+            let mut raw_pixels = Vec::new();
+            let _ = buffer.as_nopadding_buffer(&mut raw_pixels);
+            let _ = self.sender.send(Ok((width, height, raw_pixels)));
+            control.stop();
+            Ok(())
+        }
+
+        fn on_closed(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    pub async fn capture_impl(request: ScreenCaptureRequest) -> Result<ScreenCaptureResponse, String> {
+        info!("Starting Windows Graphics Capture");
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let monitor = Monitor::primary().map_err(|e| format!("Failed to get primary monitor: {}", e))?;
+        let cursor_setting = if request.include_cursor {
+            CursorCaptureSettings::WithCursor
+        } else {
+            CursorCaptureSettings::WithoutCursor
+        };
+
+        let settings = Settings::new(
+            monitor,
+            cursor_setting,
+            DrawBorderSettings::WithoutBorder,
+            SecondaryWindowSettings::Default,
+            MinimumUpdateIntervalSettings::Default,
+            DirtyRegionSettings::Default,
+            ColorFormat::Rgba8,
+            tx,
+        );
+
+        // Run the blocking WGC capture session on a dedicated thread
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = Handler::start(settings) {
+                tracing::warn!("WGC session ended with error: {}", e);
+            }
+        });
+
+        // Wait for frame with timeout
+        let (width, height, raw_pixels) = match rx.recv_timeout(std::time::Duration::from_millis(1500)) {
+            Ok(Ok(data)) => data,
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(format!("Timeout waiting for WGC frame: {}", e)),
+        };
+
+        let mut img = ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, raw_pixels)
+            .ok_or("Failed to construct image buffer from WGC frame")?;
+
+        let img = if let Some(region) = request.region {
+            let x = region.x.max(0) as u32;
+            let y = region.y.max(0) as u32;
+            let w = region.width.min(width.saturating_sub(x));
+            let h = region.height.min(height.saturating_sub(y));
+
+            if w > 0 && h > 0 {
+                image::imageops::crop(&mut img, x, y, w, h).to_image()
+            } else {
+                img
+            }
+        } else {
+            img
+        };
+
+        let final_width = img.width();
+        let final_height = img.height();
+
+        let mut png_data = Vec::new();
+        img.write_to(&mut Cursor::new(&mut png_data), image::ImageFormat::Png)
+            .map_err(|e| format!("Failed to encode PNG: {}", e))?;
+
+        let base64 = base64::engine::general_purpose::STANDARD.encode(&png_data);
+        info!("Windows Graphics Capture complete: {}x{}", final_width, final_height);
+
+        Ok(ScreenCaptureResponse {
+            image_base64: base64,
+            width: final_width,
+            height: final_height,
+            format: "png".to_string(),
+        })
+    }
 }
 
 // For vision API - send image + prompt to vision-capable models

@@ -13,7 +13,8 @@ export class SkiaRenderer {
     if (this.isReady && this.CanvasKit) return true;
 
     // In Node test environment, skip browser WASM initialization
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+    const proc = (globalThis as Record<string, unknown>).process as { env?: { NODE_ENV?: string } } | undefined;
+    if (proc?.env?.NODE_ENV === 'test') {
       return false;
     }
 

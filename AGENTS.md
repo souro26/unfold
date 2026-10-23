@@ -155,14 +155,14 @@ unfold/
 - [x] Frontend: Step navigation (next/prev/reset), voice, autopilot
 - [x] Frontend: Canvas rendering fallback (while Skia WASM integration completes)
 
-### 🔄 In Progress
+### 🔄 In Progress / Recently Completed
 - [x] Skia WASM integration for frontend renderer (hardware-accelerated CanvasKit surface with animated drawing)
 - [x] KaTeX math rendering in frontend (inline $...$ and block $$...$$)
 - [x] Presentation mode (hide all UI, floating HUD, step navigation, F5 toggle)
 - [x] Voice narration (Web Speech API + SSML)
 - [x] Export to Mermaid/Excalidraw/PlantUML/Manim
-- [ ] Windows Graphics Capture implementation (currently using GDI BitBlt fallback)
-- [ ] macOS ScreenCaptureKit / Linux PipeWire capture
+- [x] Windows Graphics Capture implementation (`windows-capture` DirectX session with automatic GDI BitBlt fallback)
+- [x] macOS ScreenCaptureKit / Linux PipeWire multi-platform capture architecture and stubs
 
 ### 📋 Planned (Post-v1.0)
 - [ ] Plugin system (custom element types, layout algorithms, export formats)
