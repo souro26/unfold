@@ -1,5 +1,6 @@
 import { BlackboardStep } from '../types';
 import { SpeechService } from '../services/speech';
+import { SkiaRenderer } from '../renderer-skia';
 
 export class BlackboardView {
   private overlayEl: HTMLElement;
@@ -7,6 +8,7 @@ export class BlackboardView {
   private ctx: CanvasRenderingContext2D | null = null;
   private closeBtn: HTMLButtonElement;
   private fullscreenBtn: HTMLButtonElement;
+  private presentationBtn: HTMLButtonElement;
   private stepPrevBtn: HTMLButtonElement;
   private stepNextBtn: HTMLButtonElement;
   private stepPlayBtn: HTMLButtonElement;
@@ -15,16 +17,26 @@ export class BlackboardView {
   private titleEl: HTMLElement;
   private descEl: HTMLElement;
 
+  // Presentation HUD elements
+  private hudPrevBtn: HTMLButtonElement;
+  private hudNextBtn: HTMLButtonElement;
+  private hudPlayBtn: HTMLButtonElement;
+  private hudExitBtn: HTMLButtonElement;
+  private hudStepBadge: HTMLElement;
+
   private currentSteps: BlackboardStep[] = [];
   private currentStepIndex: number = 0;
   private isPlaying: boolean = false;
+  private isPresentation: boolean = false;
   private playTimer: ReturnType<typeof setTimeout> | null = null;
+  private skiaRenderer: SkiaRenderer;
 
   constructor() {
     this.overlayEl = document.getElementById('vizOverlay') as HTMLElement;
     this.canvasEl = document.getElementById('vizCanvas') as HTMLCanvasElement;
     this.closeBtn = document.getElementById('vizClose') as HTMLButtonElement;
     this.fullscreenBtn = document.getElementById('vizFullscreen') as HTMLButtonElement;
+    this.presentationBtn = document.getElementById('vizPresentation') as HTMLButtonElement;
     this.stepPrevBtn = document.getElementById('stepPrev') as HTMLButtonElement;
     this.stepNextBtn = document.getElementById('stepNext') as HTMLButtonElement;
     this.stepPlayBtn = document.getElementById('stepPlay') as HTMLButtonElement;
@@ -33,42 +45,119 @@ export class BlackboardView {
     this.titleEl = document.getElementById('vizTitle') as HTMLElement;
     this.descEl = document.getElementById('vizDescription') as HTMLElement;
 
+    // Presentation HUD
+    this.hudPrevBtn = document.getElementById('hudPrev') as HTMLButtonElement;
+    this.hudNextBtn = document.getElementById('hudNext') as HTMLButtonElement;
+    this.hudPlayBtn = document.getElementById('hudPlay') as HTMLButtonElement;
+    this.hudExitBtn = document.getElementById('hudExit') as HTMLButtonElement;
+    this.hudStepBadge = document.getElementById('hudStepBadge') as HTMLElement;
+
     if (this.canvasEl) {
       this.ctx = this.canvasEl.getContext('2d');
     }
 
+    this.skiaRenderer = new SkiaRenderer();
     this.bindEvents();
   }
 
   private bindEvents(): void {
     this.closeBtn?.addEventListener('click', () => this.close());
     this.fullscreenBtn?.addEventListener('click', () => this.toggleFullscreen());
+    this.presentationBtn?.addEventListener('click', () => this.togglePresentationMode());
     this.stepPrevBtn?.addEventListener('click', () => this.prevStep());
     this.stepNextBtn?.addEventListener('click', () => this.nextStep());
     this.stepPlayBtn?.addEventListener('click', () => this.toggleAutoplay());
     this.stepVoiceBtn?.addEventListener('click', () => this.narrateCurrentStep());
 
+    // Presentation HUD events
+    this.hudPrevBtn?.addEventListener('click', () => this.prevStep());
+    this.hudNextBtn?.addEventListener('click', () => this.nextStep());
+    this.hudPlayBtn?.addEventListener('click', () => this.toggleAutoplay());
+    this.hudExitBtn?.addEventListener('click', () => this.exitPresentationMode());
+
     window.addEventListener('resize', () => {
       if (this.isOpen()) this.resizeCanvas();
     });
+
+    // Keyboard navigation in blackboard / presentation mode
+    document.addEventListener('keydown', (e) => {
+      if (!this.isOpen()) return;
+
+      if (e.key === 'F5') {
+        e.preventDefault();
+        this.togglePresentationMode();
+        return;
+      }
+
+      if (this.isPresentation) {
+        if (e.key === 'ArrowRight' || e.key === ' ') {
+          e.preventDefault();
+          this.nextStep();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          this.prevStep();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          this.exitPresentationMode();
+        }
+      }
+    });
   }
 
-  public open(steps: BlackboardStep[]): void {
+  public async open(steps: BlackboardStep[]): Promise<void> {
     this.currentSteps = steps;
     this.currentStepIndex = 0;
     this.overlayEl?.classList.add('visible');
+
+    // Attempt hardware-accelerated Skia WASM initialization
+    const skiaLoaded = await this.skiaRenderer.init();
     this.resizeCanvas();
+
+    if (skiaLoaded && this.canvasEl) {
+      this.skiaRenderer.attach(this.canvasEl);
+    }
+
     this.renderCurrentStep();
   }
 
   public close(): void {
     this.stopAutoplay();
     SpeechService.stop();
+    this.exitPresentationMode();
+    this.skiaRenderer.destroy();
     this.overlayEl?.classList.remove('visible');
   }
 
   public isOpen(): boolean {
     return this.overlayEl?.classList.contains('visible') || false;
+  }
+
+  public isPresentationMode(): boolean {
+    return this.isPresentation;
+  }
+
+  public togglePresentationMode(): void {
+    if (this.isPresentation) {
+      this.exitPresentationMode();
+    } else {
+      this.enterPresentationMode();
+    }
+  }
+
+  public enterPresentationMode(): void {
+    this.isPresentation = true;
+    this.overlayEl?.classList.add('presentation-mode');
+    this.presentationBtn?.classList.add('active');
+    this.resizeCanvas();
+    this.renderCurrentStep();
+  }
+
+  public exitPresentationMode(): void {
+    this.isPresentation = false;
+    this.overlayEl?.classList.remove('presentation-mode');
+    this.presentationBtn?.classList.remove('active');
+    this.resizeCanvas();
+    this.renderCurrentStep();
   }
 
   private resizeCanvas(): void {
@@ -77,6 +166,7 @@ export class BlackboardView {
     if (rect) {
       this.canvasEl.width = rect.width;
       this.canvasEl.height = rect.height;
+      this.skiaRenderer.resize();
       this.drawCanvas();
     }
   }
@@ -85,32 +175,46 @@ export class BlackboardView {
     if (this.currentSteps.length === 0) return;
     const step = this.currentSteps[this.currentStepIndex];
 
+    const stepLabel = `Step ${this.currentStepIndex + 1} of ${this.currentSteps.length}`;
     if (this.titleEl) this.titleEl.textContent = step.title;
     if (this.descEl) this.descEl.textContent = step.explanation;
-    if (this.stepIndicator) {
-      this.stepIndicator.textContent = `Step ${this.currentStepIndex + 1} of ${this.currentSteps.length}`;
-    }
+    if (this.stepIndicator) this.stepIndicator.textContent = stepLabel;
+    if (this.hudStepBadge) this.hudStepBadge.textContent = `${stepLabel}: ${step.title}`;
 
-    if (this.stepPrevBtn) this.stepPrevBtn.disabled = this.currentStepIndex === 0;
-    if (this.stepNextBtn) this.stepNextBtn.disabled = this.currentStepIndex === this.currentSteps.length - 1;
+    const isFirst = this.currentStepIndex === 0;
+    const isLast = this.currentStepIndex === this.currentSteps.length - 1;
+
+    if (this.stepPrevBtn) this.stepPrevBtn.disabled = isFirst;
+    if (this.stepNextBtn) this.stepNextBtn.disabled = isLast;
+    if (this.hudPrevBtn) this.hudPrevBtn.disabled = isFirst;
+    if (this.hudNextBtn) this.hudNextBtn.disabled = isLast;
 
     this.drawCanvas();
   }
 
   private drawCanvas(): void {
+    if (this.currentSteps.length === 0) return;
+    const step = this.currentSteps[this.currentStepIndex];
+
+    // Prefer hardware-accelerated Skia renderer if surface is active
+    if (this.skiaRenderer.hasSurface()) {
+      this.skiaRenderer.animateStep(step, 500);
+      return;
+    }
+
+    // High quality 2D canvas fallback
     if (!this.ctx || !this.canvasEl) return;
     this.ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
 
-    // Render background grid
     this.drawGrid();
 
-    // Render elements for this step
-    const step = this.currentSteps[this.currentStepIndex];
-    if (step?.elements) {
+    if (step.elements) {
       step.elements.forEach((el) => {
         if (!this.ctx) return;
         this.ctx.strokeStyle = el.color || '#00d4aa';
         this.ctx.lineWidth = el.strokeWidth || 2;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
 
         if (el.type === 'rect' && el.start && el.width && el.height) {
           this.ctx.strokeRect(el.start.x, el.start.y, el.width, el.height);

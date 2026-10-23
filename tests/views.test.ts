@@ -13,6 +13,7 @@ describe('Views and Navigation', () => {
       <div class="app"></div>
       <div id="vizOverlay" class="visualization-overlay">
         <canvas id="vizCanvas"></canvas>
+        <button id="vizPresentation"></button>
         <button id="vizClose"></button>
         <button id="vizFullscreen"></button>
         <button id="stepPrev"></button>
@@ -22,6 +23,14 @@ describe('Views and Navigation', () => {
         <span id="stepIndicator"></span>
         <span id="vizTitle"></span>
         <span id="vizDescription"></span>
+
+        <div id="presentationHud" class="presentation-hud">
+          <button id="hudPrev"></button>
+          <span id="hudStepBadge"></span>
+          <button id="hudPlay"></button>
+          <button id="hudNext"></button>
+          <button id="hudExit"></button>
+        </div>
       </div>
     `;
   });
@@ -61,7 +70,7 @@ describe('Views and Navigation', () => {
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
-  it('BlackboardView opens steps and navigates between steps', () => {
+  it('BlackboardView opens steps and navigates between steps', async () => {
     const bbView = new BlackboardView();
     expect(bbView.isOpen()).toBe(false);
 
@@ -70,7 +79,7 @@ describe('Views and Navigation', () => {
       { step: 2, title: 'Step 2 Title', explanation: 'Step 2 Details' },
     ];
 
-    bbView.open(steps);
+    await bbView.open(steps);
     expect(bbView.isOpen()).toBe(true);
     expect(document.getElementById('vizTitle')?.textContent).toBe('Step 1 Title');
 
@@ -82,5 +91,31 @@ describe('Views and Navigation', () => {
 
     bbView.close();
     expect(bbView.isOpen()).toBe(false);
+  });
+
+  it('BlackboardView enters and exits Presentation Mode cleanly', async () => {
+    const bbView = new BlackboardView();
+    const steps = [
+      { step: 1, title: 'Architecture Overview', explanation: 'Node topologies' },
+      { step: 2, title: 'State Replication', explanation: 'Log consensus' },
+    ];
+
+    await bbView.open(steps);
+    expect(bbView.isPresentationMode()).toBe(false);
+
+    // Enter presentation mode
+    bbView.enterPresentationMode();
+    expect(bbView.isPresentationMode()).toBe(true);
+    expect(document.getElementById('vizOverlay')?.classList.contains('presentation-mode')).toBe(true);
+    expect(document.getElementById('hudStepBadge')?.textContent).toContain('Step 1 of 2');
+
+    // Next step in presentation
+    bbView.nextStep();
+    expect(document.getElementById('hudStepBadge')?.textContent).toContain('Step 2 of 2');
+
+    // Exit presentation mode
+    bbView.exitPresentationMode();
+    expect(bbView.isPresentationMode()).toBe(false);
+    expect(document.getElementById('vizOverlay')?.classList.contains('presentation-mode')).toBe(false);
   });
 });

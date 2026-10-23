@@ -158,6 +158,13 @@
     <div class="viz-header">
       <div class="title" id="vizTitle">Visualization</div>
       <div class="viz-actions">
+        <button class="viz-btn" id="vizPresentation" aria-label="Presentation Mode" title="Presentation Mode (F5)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <polygon points="10 8 16 11 10 14 10 8" fill="currentColor" />
+          </svg>
+          <span>Present</span>
+        </button>
         <button class="viz-btn" id="vizFullscreen" aria-label="Fullscreen" title="Fullscreen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
@@ -187,6 +194,33 @@
         <button class="viz-btn" id="stepNext">Next</button>
         <button class="viz-btn" id="stepVoice">Narrate</button>
       </div>
+    </div>
+
+    <!-- Floating Presentation HUD -->
+    <div class="presentation-hud" id="presentationHud">
+      <button class="hud-btn" id="hudPrev" title="Previous Step (Left Arrow)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+      </button>
+      <span class="hud-step-badge" id="hudStepBadge">Step 1 of 5</span>
+      <button class="hud-btn" id="hudPlay" title="Autoplay / Pause (Space)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" id="hudPlayIcon">
+          <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" />
+        </svg>
+      </button>
+      <button class="hud-btn" id="hudNext" title="Next Step (Right Arrow)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+      <div class="hud-divider"></div>
+      <button class="hud-btn" id="hudExit" title="Exit Presentation (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
     </div>
   </div>
 
