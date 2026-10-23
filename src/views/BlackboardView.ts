@@ -1,6 +1,7 @@
 import { BlackboardStep } from '../types';
 import { SpeechService } from '../services/speech';
 import { SkiaRenderer } from '../renderer-skia';
+import { ExportService } from '../services/export';
 
 export class BlackboardView {
   private overlayEl: HTMLElement;
@@ -16,6 +17,13 @@ export class BlackboardView {
   private stepIndicator: HTMLElement;
   private titleEl: HTMLElement;
   private descEl: HTMLElement;
+
+  // Export elements
+  private exportBtn: HTMLButtonElement | null;
+  private exportMenu: HTMLElement | null;
+  private exportMermaidBtn: HTMLElement | null;
+  private exportExcalidrawBtn: HTMLElement | null;
+  private exportPlantUMLBtn: HTMLElement | null;
 
   // Presentation HUD elements
   private hudPrevBtn: HTMLButtonElement;
@@ -45,6 +53,13 @@ export class BlackboardView {
     this.titleEl = document.getElementById('vizTitle') as HTMLElement;
     this.descEl = document.getElementById('vizDescription') as HTMLElement;
 
+    // Export elements
+    this.exportBtn = document.getElementById('vizExportBtn') as HTMLButtonElement | null;
+    this.exportMenu = document.getElementById('exportMenu') as HTMLElement | null;
+    this.exportMermaidBtn = document.getElementById('exportMermaid');
+    this.exportExcalidrawBtn = document.getElementById('exportExcalidraw');
+    this.exportPlantUMLBtn = document.getElementById('exportPlantUML');
+
     // Presentation HUD
     this.hudPrevBtn = document.getElementById('hudPrev') as HTMLButtonElement;
     this.hudNextBtn = document.getElementById('hudNext') as HTMLButtonElement;
@@ -68,6 +83,22 @@ export class BlackboardView {
     this.stepNextBtn?.addEventListener('click', () => this.nextStep());
     this.stepPlayBtn?.addEventListener('click', () => this.toggleAutoplay());
     this.stepVoiceBtn?.addEventListener('click', () => this.narrateCurrentStep());
+
+    // Export dropdown events
+    this.exportBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.exportMenu?.classList.toggle('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (this.exportMenu && !this.exportMenu.contains(e.target as Node)) {
+        this.exportMenu.classList.add('hidden');
+      }
+    });
+
+    this.exportMermaidBtn?.addEventListener('click', () => this.exportDiagram('mermaid'));
+    this.exportExcalidrawBtn?.addEventListener('click', () => this.exportDiagram('excalidraw'));
+    this.exportPlantUMLBtn?.addEventListener('click', () => this.exportDiagram('plantuml'));
 
     // Presentation HUD events
     this.hudPrevBtn?.addEventListener('click', () => this.prevStep());
@@ -306,8 +337,43 @@ export class BlackboardView {
 
   public narrateCurrentStep(): void {
     const step = this.currentSteps[this.currentStepIndex];
-    if (step) {
-      SpeechService.speak(`${step.title}. ${step.explanation}`);
+    if (!step) return;
+
+    if (SpeechService.isSpeaking()) {
+      SpeechService.stop();
+      if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
+      return;
+    }
+
+    if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Speaking...';
+
+    SpeechService.speak(`${step.title}. ${step.explanation}`, {
+      rate: 1.0,
+      onEnd: () => {
+        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
+        if (this.isPlaying && this.currentStepIndex < this.currentSteps.length - 1) {
+          setTimeout(() => this.nextStep(), 800);
+        }
+      },
+      onError: () => {
+        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
+      },
+    });
+  }
+
+  public exportDiagram(format: 'mermaid' | 'excalidraw' | 'plantuml'): void {
+    this.exportMenu?.classList.add('hidden');
+    if (this.currentSteps.length === 0) return;
+
+    if (format === 'mermaid') {
+      const code = ExportService.toMermaid(this.currentSteps);
+      ExportService.downloadFile('diagram.mmd', code, 'text/vnd.mermaid');
+    } else if (format === 'excalidraw') {
+      const json = ExportService.toExcalidraw(this.currentSteps);
+      ExportService.downloadFile('diagram.excalidraw', JSON.stringify(json, null, 2), 'application/json');
+    } else if (format === 'plantuml') {
+      const puml = ExportService.toPlantUML(this.currentSteps);
+      ExportService.downloadFile('diagram.puml', puml, 'text/plain');
     }
   }
 
