@@ -1,0 +1,118 @@
+/* Blackboard Visualization Overlay */
+.visualization-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(14, 14, 18, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 200;
+  flex-direction: column;
+}
+
+.visualization-overlay.visible {
+  display: flex;
+}
+
+.viz-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: rgba(22, 22, 28, 0.85);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.viz-header .title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.viz-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.viz-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.viz-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: #555;
+}
+
+.viz-btn.active {
+  background: rgba(0, 212, 170, 0.15);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.viz-body {
+  flex: 1;
+  position: relative;
+  display: flex;
+}
+
+.viz-canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+#vizCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* Step controls at bottom of blackboard */
+.viz-controls {
+  padding: 16px 24px;
+  background: rgba(22, 22, 28, 0.9);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.viz-step-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.viz-step-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.viz-step-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 600px;
+}
+
+.viz-step-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

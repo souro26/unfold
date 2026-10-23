@@ -1,8 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod overlay;
-mod commands;
-mod screen_capture;
+use unfold::{commands, overlay};
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
