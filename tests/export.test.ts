@@ -53,6 +53,19 @@ describe('Export Service', () => {
     expect(types).toContain('line');
     expect(types).toContain('arrow');
   });
+
+  it('toManim should generate valid Python Manim Scene code with animations', () => {
+    const manim = ExportService.toManim(mockSteps);
+    expect(manim).toContain('from manim import *');
+    expect(manim).toContain('class UnfoldScene(Scene):');
+    expect(manim).toContain('title_1 = Text(r"1. Initialize System"');
+    expect(manim).toContain('desc_1 = Text(r"Bootstraps cluster state"');
+    expect(manim).toContain('Rectangle(');
+    expect(manim).toContain('Line(');
+    expect(manim).toContain('Arrow(');
+    expect(manim).toContain('self.play(Write(title_1), FadeIn(desc_1))');
+    expect(manim).toContain('self.play(FadeOut(Group(');
+  });
 });
 
 describe('SpeechService SSML Parser', () => {

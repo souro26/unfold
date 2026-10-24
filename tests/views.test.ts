@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HomeView } from '../src/views/HomeView';
 import { ScreenTeachView } from '../src/views/ScreenTeachView';
 import { BlackboardView } from '../src/views/BlackboardView';
+import { ExportService } from '../src/services/export';
 
 describe('Views and Navigation', () => {
   beforeEach(() => {
@@ -117,5 +118,29 @@ describe('Views and Navigation', () => {
     bbView.exitPresentationMode();
     expect(bbView.isPresentationMode()).toBe(false);
     expect(document.getElementById('vizOverlay')?.classList.contains('presentation-mode')).toBe(false);
+  });
+
+  it('BlackboardView exportDiagram triggers ExportService download for all supported formats', async () => {
+    const bbView = new BlackboardView();
+    const steps = [
+      { step: 1, title: 'Step 1 Title', explanation: 'Step 1 Details' },
+    ];
+    await bbView.open(steps);
+
+    const downloadSpy = vi.spyOn(ExportService, 'downloadFile').mockImplementation(() => {});
+
+    bbView.exportDiagram('manim');
+    expect(downloadSpy).toHaveBeenCalledWith('scene.py', expect.stringContaining('from manim import *'), 'text/x-python');
+
+    bbView.exportDiagram('mermaid');
+    expect(downloadSpy).toHaveBeenCalledWith('diagram.mmd', expect.stringContaining('flowchart TD'), 'text/vnd.mermaid');
+
+    bbView.exportDiagram('plantuml');
+    expect(downloadSpy).toHaveBeenCalledWith('diagram.puml', expect.stringContaining('@startuml'), 'text/plain');
+
+    bbView.exportDiagram('excalidraw');
+    expect(downloadSpy).toHaveBeenCalledWith('diagram.excalidraw', expect.stringContaining('"type": "excalidraw"'), 'application/json');
+
+    downloadSpy.mockRestore();
   });
 });

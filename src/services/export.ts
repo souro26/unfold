@@ -41,6 +41,110 @@ export class ExportService {
   }
 
   /**
+   * Export blackboard steps to Manim Community Edition Python scene code
+   */
+  public static toManim(steps: BlackboardStep[]): string {
+    const lines: string[] = [
+      'from manim import *',
+      '',
+      'class UnfoldScene(Scene):',
+      '    """',
+      '    Auto-generated visual explanation scene by Unfold.',
+      '    Render using: manim -pql scene.py UnfoldScene',
+      '    """',
+      '    def construct(self):',
+      '        self.camera.background_color = "#121214"',
+      '',
+    ];
+
+    if (steps.length === 0) {
+      lines.push('        pass');
+      return lines.join('\n');
+    }
+
+    steps.forEach((step, idx) => {
+      const stepNum = idx + 1;
+      const safeTitle = step.title.replace(/["\\]/g, '\\$&').replace(/\n/g, ' ');
+      const safeExp = (step.explanation || '').replace(/["\\]/g, '\\$&').replace(/\n/g, ' ');
+
+      lines.push(`        # --- Step ${stepNum}: ${safeTitle} ---`);
+      lines.push(`        title_${stepNum} = Text(r"${stepNum}. ${safeTitle}", font_size=32, color="#00d4aa").to_edge(UP)`);
+      if (safeExp) {
+        lines.push(`        desc_${stepNum} = Text(r"${safeExp}", font_size=20, color="#9ca3af").next_to(title_${stepNum}, DOWN, buff=0.25)`);
+      }
+
+      // Collect geometric elements
+      const elementVarNames: string[] = [];
+      if (step.elements && step.elements.length > 0) {
+        step.elements.forEach((el, elIdx) => {
+          const varName = `elem_${stepNum}_${elIdx + 1}`;
+          const colorHex = el.color || '#00d4aa';
+
+          if (el.type === 'rect' && el.start) {
+            const w = ((el.width || 100) / 100).toFixed(2);
+            const h = ((el.height || 60) / 100).toFixed(2);
+            const cx = ((el.start.x + (el.width || 100) / 2 - 500) / 100).toFixed(2);
+            const cy = (-(el.start.y + (el.height || 60) / 2 - 350) / 100).toFixed(2);
+            lines.push(`        ${varName} = Rectangle(width=${w}, height=${h}, color="${colorHex}", fill_opacity=0.15).move_to([${cx}, ${cy}, 0])`);
+            elementVarNames.push(varName);
+          } else if (el.type === 'circle' && el.start) {
+            const r = ((el.radius || 40) / 100).toFixed(2);
+            const cx = ((el.start.x - 500) / 100).toFixed(2);
+            const cy = (-(el.start.y - 350) / 100).toFixed(2);
+            lines.push(`        ${varName} = Circle(radius=${r}, color="${colorHex}", fill_opacity=0.15).move_to([${cx}, ${cy}, 0])`);
+            elementVarNames.push(varName);
+          } else if (el.type === 'line' && el.start && el.end) {
+            const x1 = ((el.start.x - 500) / 100).toFixed(2);
+            const y1 = (-(el.start.y - 350) / 100).toFixed(2);
+            const x2 = ((el.end.x - 500) / 100).toFixed(2);
+            const y2 = (-(el.end.y - 350) / 100).toFixed(2);
+            lines.push(`        ${varName} = Line(start=[${x1}, ${y1}, 0], end=[${x2}, ${y2}, 0], color="${colorHex}")`);
+            elementVarNames.push(varName);
+          } else if (el.type === 'arrow' && el.start && el.end) {
+            const x1 = ((el.start.x - 500) / 100).toFixed(2);
+            const y1 = (-(el.start.y - 350) / 100).toFixed(2);
+            const x2 = ((el.end.x - 500) / 100).toFixed(2);
+            const y2 = (-(el.end.y - 350) / 100).toFixed(2);
+            lines.push(`        ${varName} = Arrow(start=[${x1}, ${y1}, 0], end=[${x2}, ${y2}, 0], color="${colorHex}", buff=0)`);
+            elementVarNames.push(varName);
+          } else if (el.type === 'text' && el.start && el.text) {
+            const safeText = el.text.replace(/["\\]/g, '\\$&');
+            const cx = ((el.start.x - 500) / 100).toFixed(2);
+            const cy = (-(el.start.y - 350) / 100).toFixed(2);
+            lines.push(`        ${varName} = Text(r"${safeText}", font_size=20, color="${colorHex}").move_to([${cx}, ${cy}, 0])`);
+            elementVarNames.push(varName);
+          }
+        });
+      }
+
+      // Play animations
+      const showAnim = safeExp
+        ? `self.play(Write(title_${stepNum}), FadeIn(desc_${stepNum}))`
+        : `self.play(Write(title_${stepNum}))`;
+      lines.push(`        ${showAnim}`);
+
+      if (elementVarNames.length > 0) {
+        lines.push(`        self.play(${elementVarNames.map((v) => `Create(${v})`).join(', ')})`);
+      }
+
+      lines.push('        self.wait(1.5)');
+
+      if (idx < steps.length - 1) {
+        const fadeGroup = [
+          `title_${stepNum}`,
+          ...(safeExp ? [`desc_${stepNum}`] : []),
+          ...elementVarNames,
+        ].join(', ');
+        lines.push(`        self.play(FadeOut(Group(${fadeGroup})))`);
+        lines.push('');
+      }
+    });
+
+    lines.push('        self.wait(2)');
+    return lines.join('\n');
+  }
+
+  /**
    * Export blackboard elements to Excalidraw JSON format
    */
   public static toExcalidraw(steps: BlackboardStep[]): Record<string, any> {

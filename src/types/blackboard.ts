@@ -16,6 +16,7 @@ export interface DrawingElement {
   text?: string;
   width?: number;
   height?: number;
+  radius?: number;
 }
 
 export interface BlackboardStep {

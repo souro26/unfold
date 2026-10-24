@@ -2,6 +2,7 @@ import { BlackboardStep } from '../types';
 import { SpeechService } from '../services/speech';
 import { SkiaRenderer } from '../renderer-skia';
 import { ExportService } from '../services/export';
+import { PluginManager } from '../services/PluginManager';
 
 export class BlackboardView {
   private overlayEl: HTMLElement;
@@ -24,6 +25,7 @@ export class BlackboardView {
   private exportMermaidBtn: HTMLElement | null;
   private exportExcalidrawBtn: HTMLElement | null;
   private exportPlantUMLBtn: HTMLElement | null;
+  private exportManimBtn: HTMLElement | null;
 
   // Presentation HUD elements
   private hudPrevBtn: HTMLButtonElement;
@@ -59,6 +61,7 @@ export class BlackboardView {
     this.exportMermaidBtn = document.getElementById('exportMermaid');
     this.exportExcalidrawBtn = document.getElementById('exportExcalidraw');
     this.exportPlantUMLBtn = document.getElementById('exportPlantUML');
+    this.exportManimBtn = document.getElementById('exportManim');
 
     // Presentation HUD
     this.hudPrevBtn = document.getElementById('hudPrev') as HTMLButtonElement;
@@ -99,6 +102,7 @@ export class BlackboardView {
     this.exportMermaidBtn?.addEventListener('click', () => this.exportDiagram('mermaid'));
     this.exportExcalidrawBtn?.addEventListener('click', () => this.exportDiagram('excalidraw'));
     this.exportPlantUMLBtn?.addEventListener('click', () => this.exportDiagram('plantuml'));
+    this.exportManimBtn?.addEventListener('click', () => this.exportDiagram('manim'));
 
     // Presentation HUD events
     this.hudPrevBtn?.addEventListener('click', () => this.prevStep());
@@ -220,6 +224,7 @@ export class BlackboardView {
     if (this.hudPrevBtn) this.hudPrevBtn.disabled = isFirst;
     if (this.hudNextBtn) this.hudNextBtn.disabled = isLast;
 
+    PluginManager.getInstance().notifyStepRender(step);
     this.drawCanvas();
   }
 
@@ -261,6 +266,8 @@ export class BlackboardView {
             this.ctx.lineTo(el.points[i].x, el.points[i].y);
           }
           this.ctx.stroke();
+        } else {
+          PluginManager.getInstance().renderCustomElement(this.ctx, el);
         }
       });
     }
@@ -361,7 +368,7 @@ export class BlackboardView {
     });
   }
 
-  public exportDiagram(format: 'mermaid' | 'excalidraw' | 'plantuml'): void {
+  public exportDiagram(format: 'mermaid' | 'excalidraw' | 'plantuml' | 'manim' | string): void {
     this.exportMenu?.classList.add('hidden');
     if (this.currentSteps.length === 0) return;
 
@@ -374,6 +381,14 @@ export class BlackboardView {
     } else if (format === 'plantuml') {
       const puml = ExportService.toPlantUML(this.currentSteps);
       ExportService.downloadFile('diagram.puml', puml, 'text/plain');
+    } else if (format === 'manim') {
+      const code = ExportService.toManim(this.currentSteps);
+      ExportService.downloadFile('scene.py', code, 'text/x-python');
+    } else {
+      const pluginExport = PluginManager.getInstance().executeExport(format, this.currentSteps);
+      if (pluginExport) {
+        ExportService.downloadFile(pluginExport.filename, pluginExport.content, pluginExport.mimeType);
+      }
     }
   }
 

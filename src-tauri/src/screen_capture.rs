@@ -479,6 +479,7 @@ pub async fn call_vision_api(request: VisionRequest) -> Result<VisionResponse, S
         "openai" => call_openai_vision(request).await,
         "gemini" => call_gemini_vision(request).await,
         "ollama" => call_ollama_vision(request).await,
+        "llama_cpp" | "local" => call_llama_cpp_vision(request).await,
         _ => Err(format!("Provider {} does not support vision", request.provider)),
     }
 }
@@ -903,6 +904,106 @@ async fn call_ollama_vision(request: VisionRequest) -> Result<VisionResponse, St
         content: resp.message.content,
         model: request.model,
         provider: "ollama".to_string(),
+        usage: None,
+    })
+}
+
+async fn call_llama_cpp_vision(request: VisionRequest) -> Result<VisionResponse, String> {
+    let base = std::env::var("LLAMA_CPP_ENDPOINT").unwrap_or_else(|_| "http://localhost:8080/v1".to_string());
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+
+    #[derive(serde::Serialize)]
+    struct LlamaCppRequest {
+        model: String,
+        messages: Vec<LlamaCppMessage>,
+        temperature: f32,
+        max_tokens: u32,
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct LlamaCppMessage {
+        role: String,
+        content: serde_json::Value,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct LlamaCppResponse {
+        choices: Vec<LlamaCppChoice>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct LlamaCppChoice {
+        message: LlamaCppMessage,
+    }
+
+    let mut content = vec![
+        serde_json::json!({"type": "text", "text": request.prompt}),
+    ];
+
+    if !request.image_base64.is_empty() {
+        content.push(serde_json::json!({
+            "type": "image_url",
+            "image_url": {
+                "url": format!("data:image/png;base64,{}", request.image_base64)
+            }
+        }));
+    }
+
+    let messages = vec![
+        LlamaCppMessage {
+            role: "system".to_string(),
+            content: serde_json::json!("You are Unfold, an AI teaching assistant. Explain what you see in the image clearly and educationally."),
+        },
+        LlamaCppMessage {
+            role: "user".to_string(),
+            content: serde_json::json!(content),
+        },
+    ];
+
+    let body = LlamaCppRequest {
+        model: request.model.clone(),
+        messages,
+        temperature: 0.7,
+        max_tokens: 4096,
+    };
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("llama.cpp vision request failed: {}. Ensure llama-server is running on {}", e, base))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error = response.text().await.unwrap_or_default();
+        return Err(format!("llama.cpp vision error: {} - {}", status, error));
+    }
+
+    let resp: LlamaCppResponse = response.json().await
+        .map_err(|e| format!("Failed to parse llama.cpp vision response: {}", e))?;
+
+    let content = resp.choices.first()
+        .map(|c| {
+            match &c.message.content {
+                serde_json::Value::Array(arr) => {
+                    arr.iter()
+                        .filter_map(|v| v.get("text").and_then(|t| t.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("")
+                }
+                serde_json::Value::String(s) => s.clone(),
+                _ => "No response".to_string(),
+            }
+        })
+        .unwrap_or_else(|| "No response generated".to_string());
+
+    Ok(VisionResponse {
+        content,
+        model: request.model,
+        provider: "llama_cpp".to_string(),
         usage: None,
     })
 }

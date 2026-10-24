@@ -165,12 +165,12 @@ unfold/
 - [x] macOS ScreenCaptureKit / Linux PipeWire multi-platform capture architecture and stubs
 
 ### 📋 Planned (Post-v1.0)
-- [ ] Plugin system (custom element types, layout algorithms, export formats)
+- [x] Plugin system (custom element types, layout algorithms, export formats)
 - [ ] Collaborative mode (WebRTC + Yjs for shared overlay)
-- [ ] Manim code export for video generation
+- [x] Manim code export for video generation
 - [ ] Advanced gesture recognition (pinch-zoom, rotate)
 - [ ] Multi-language voice support
-- [ ] Local LLM via llama.cpp sidecar (Nemotron-3-4B-int4 for RTX 4060 8GB)
+- [x] Local LLM via llama.cpp sidecar (Nemotron-3-4B-int4 for RTX 4060 8GB)
 
 ## Gotchas / Quirks
 

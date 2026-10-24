@@ -86,10 +86,18 @@ pub async fn send_message(
         .map_err(|e| format!("Failed to read settings: {}", e))?
         .clone();
 
-    let api_key = settings
-        .api_key
-        .clone()
-        .ok_or_else(|| "No API key configured. Please set your API key in settings.".to_string())?;
+    let is_local = settings.llm_provider == "ollama"
+        || settings.llm_provider == "llama_cpp"
+        || settings.llm_provider == "local";
+
+    let api_key = if is_local {
+        settings.api_key.clone().unwrap_or_default()
+    } else {
+        settings
+            .api_key
+            .clone()
+            .ok_or_else(|| "No API key configured. Please set your API key in settings.".to_string())?
+    };
 
     let prompt = prompt
         .or_else(|| request.as_ref().map(|r| r.prompt.clone()))
@@ -108,7 +116,7 @@ pub async fn send_message(
                 image_base64: image_data,
                 model,
                 provider: settings.llm_provider,
-                api_key: Some(api_key),
+                api_key: if api_key.is_empty() { None } else { Some(api_key) },
                 conversation_history: None,
             };
             let vision_resp = call_vision_api(vision_req).await?;
@@ -168,6 +176,10 @@ Keep responses clear, educational, and engaging. Use markdown formatting."#;
             let base = std::env::var("OLLAMA_ENDPOINT").unwrap_or_else(|_| "http://localhost:11434".to_string());
             let url = format!("{}/api/chat", base);
             return call_ollama(&url, model, prompt).await;
+        }
+        "llama_cpp" | "local" => {
+            let base = std::env::var("LLAMA_CPP_ENDPOINT").unwrap_or_else(|_| "http://localhost:8080/v1".to_string());
+            return call_llama_cpp(&base, model, prompt).await;
         }
         _ => return Err(format!("Unknown provider: {}", settings.llm_provider)),
     };
@@ -326,6 +338,57 @@ async fn call_ollama(url: &str, model: String, prompt: String) -> Result<String,
     Ok(ollama_resp.message.content)
 }
 
+async fn call_llama_cpp(base_url: &str, model: String, prompt: String) -> Result<String, String> {
+    let system_prompt = "You are Unfold, an AI teaching assistant. Explain concepts clearly with examples.";
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: prompt,
+        },
+    ];
+
+    let request_body = ChatCompletionRequest {
+        model,
+        messages,
+        temperature: 0.7,
+        max_tokens: 4096,
+        stream: false,
+    };
+
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("llama.cpp request failed: {}. Ensure llama-server is running on {}", e, base_url))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error = response.text().await.unwrap_or_default();
+        return Err(format!("llama.cpp API error: {} - {}", status, error));
+    }
+
+    let chat_response: ChatCompletionResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse llama.cpp response: {}", e))?;
+
+    let content = chat_response
+        .choices
+        .first()
+        .map(|c| c.message.content.clone())
+        .unwrap_or_else(|| "No response generated".to_string());
+
+    Ok(content)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,5 +417,22 @@ mod tests {
         let serialized = serde_json::to_string(&req).unwrap();
         assert!(serialized.contains("llama-3-8b"));
         assert!(serialized.contains("hello"));
+    }
+
+    #[test]
+    fn test_llama_cpp_model_defaults() {
+        let req = ChatCompletionRequest {
+            model: "nemotron-3-4b-int4".into(),
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "How does distributed consensus work?".into(),
+            }],
+            temperature: 0.7,
+            max_tokens: 2048,
+            stream: false,
+        };
+        let serialized = serde_json::to_string(&req).unwrap();
+        assert!(serialized.contains("nemotron-3-4b-int4"));
+        assert!(serialized.contains("distributed consensus"));
     }
 }
