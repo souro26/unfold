@@ -100,40 +100,68 @@ unfold/
 ├── tsconfig.json             # TypeScript strict config
 ├── tsconfig.node.json        # Node build config
 ├── vite.config.ts            # Vite config for frontend
-├── tauri.conf.json           # Tauri 2 configuration
-├── Cargo.toml                # Rust workspace + deps
+├── Cargo.toml                # Rust workspace root
 ├── src-tauri/
 │   ├── build.rs              # Tauri build script
+│   ├── tauri.conf.json       # Tauri 2 configuration & CSP
+│   ├── Cargo.toml            # Rust dependencies & features
 │   ├── src/
-│   │   ├── main.rs           # App entry
-│   │   ├── overlay.rs        # Overlay window manager
-│   │   ├── settings.rs       # Settings persistence
-│   │   ├── ipc/mod.rs        # Tauri commands
-│   │   ├── drawing/
-│   │   │   ├── mod.rs
-│   │   │   ├── types.rs      # DrawingPlan, Element, Step, Viewport
-│   │   │   ├── layout.rs     # LayoutEngine
-│   │   │   ├── renderer.rs   # SkiaRenderer
-│   │   │   └── planner.rs    # LLMPlanner
-│   │   └── vision/
+│   │   ├── main.rs           # App entry & Tauri runtime builder
+│   │   ├── lib.rs            # Library entry & test harnesses
+│   │   ├── overlay.rs        # Overlay window lifecycle, click-through, monitor bounds
+│   │   ├── screen_capture.rs # Windows Graphics Capture DirectX session + GDI fallback
+│   │   └── commands/         # Modular Tauri IPC commands
 │   │       ├── mod.rs
-│   │       ├── capture.rs    # Screen/window capture
-│   │       ├── ocr.rs        # Tesseract OCR
-│   │       └── local_model.rs # ONNX vision models
-│   ├── icons/                # App icons (32x32, 128x128, 256x256, .icns, .ico)
-│   ├── entitlements.plist    # macOS entitlements
-│   └── target/               # Cargo build output
+│   │       ├── capture.rs    # Screen capture IPC handler
+│   │       ├── chat.rs       # LLM chat streaming & vision inference (Gemini, Groq, Ollama, OpenAI, llama.cpp)
+│   │       ├── overlay.rs    # Overlay & click-through IPC handlers
+│   │       └── settings.rs   # Persistent settings management
+│   ├── icons/                # App icons (32x32, 128x128, 256x256, .ico)
+│   └── tests/
+│       └── integration_tests.rs # Rust IPC and capture integration tests
 ├── src/
-│   ├── overlay.html          # Overlay UI
-│   ├── main.ts               # Frontend entry
-│   └── types.ts              # TS types (mirrored from Rust)
-├── public/                   # Static assets
-└── dist/                     # Vite build output
+│   ├── overlay.html          # Overlay UI template
+│   ├── main.ts               # Frontend app orchestrator & event coordinator
+│   ├── components/           # Reusable UI components
+│   │   ├── Composer.ts       # Auto-resizing textarea, send actions, overlay exit
+│   │   ├── SettingsModal.ts  # Model configuration, dynamic API hints, Escape/backdrop handling
+│   │   └── Sidebar.ts        # Conversation list, chat deletion, collapse toggle
+│   ├── views/                # Full-screen and overlay view controllers
+│   │   ├── BlackboardView.ts # Skia WASM + 2D canvas, steps, presentation HUD, gestures
+│   │   ├── HomeView.ts       # Empty state and mode selection cards
+│   │   └── ScreenTeachView.ts # Translucent screen overlay mode
+│   ├── services/             # Core business logic & storage
+│   │   ├── collaboration.ts  # WebRTC + Yjs multi-user synchronization
+│   │   ├── export.ts         # Mermaid, Excalidraw, PlantUML, Manim exports
+│   │   ├── ipc.ts            # Tauri IPC command wrappers
+│   │   ├── PluginManager.ts  # Extensible plugin system (DOT, TikZ, Custom layouts)
+│   │   ├── speech.ts         # Multi-language voice narration (Web Speech API)
+│   │   └── storage.ts        # Local chat persistence, auto-titling, JSON backup
+│   ├── styles/               # Modular vanilla CSS design system
+│   │   ├── base.css
+│   │   ├── composer.css
+│   │   ├── modal.css
+│   │   ├── overlay.css
+│   │   ├── sidebar.css
+│   │   └── visualization.css
+│   ├── types/                # TypeScript type definitions
+│   └── utils/                # Markdown, KaTeX, and helper utilities
+├── tests/                    # Vitest comprehensive unit & QA test suite (8 test files, 58 tests)
+│   ├── collaboration.test.ts
+│   ├── export.test.ts
+│   ├── markdown.test.ts
+│   ├── plugins.test.ts
+│   ├── storage.test.ts
+│   ├── ui_qa.test.ts
+│   ├── utils.test.ts
+│   └── views.test.ts
+├── public/                   # Static assets & WASM binaries
+└── dist/                     # Production build bundle
 ```
 
 ## Current Implementation Status (v0.1.0)
 
-### ✅ Completed (Core Architecture)
+### ✅ Completed (Core Architecture & Frontend)
 - [x] Tauri 2 project structure with proper configuration
 - [x] Rust type system for DrawingPlan, Elements, Steps, Viewport
 - [x] Overlay window manager with per-monitor support
@@ -141,36 +169,32 @@ unfold/
 - [x] Global shortcuts: `Ctrl+Shift+U` (toggle), `Ctrl+I` (command palette), `Esc` (click-through)
 - [x] System tray with show/quit menu
 - [x] Settings persistence (LLM providers, overlay, drawing, vision, hotkeys)
-- [x] LayoutEngine with isotropic scaling, safe bounds, collision resolution
-- [x] SkiaRenderer with animated stroke drawing for all element types
-- [x] Universal LLM planner (Groq, Gemini, Ollama, OpenAI, Mock)
-- [x] Declarative spec compiler (sequences → lists, nodes/edges → graphs)
-- [x] Validation → repair → retry loop (3 attempts)
+- [x] Universal LLM planner (Groq, Gemini, Ollama, OpenAI, Mock, llama.cpp sidecar)
 - [x] Tier 1 vision: Window metadata capture (Windows/macOS/Linux stubs)
 - [x] Tier 2 vision: Tesseract OCR integration
-- [x] Tier 3 vision: ONNX Runtime local model loader (Moondream2, Phi-3-Vision, YOLO)
-- [x] IPC command bridge (generate_plan, analyze_screen, load_drawing_plan, etc.)
-- [x] Frontend: Toolbar, command palette, drawing controls, tool settings popover
-- [x] Frontend: Freehand drawing with pressure + Catmull-Rom smoothing
-- [x] Frontend: Step navigation (next/prev/reset), voice, autopilot
-- [x] Frontend: Canvas rendering fallback (while Skia WASM integration completes)
-
-### 🔄 In Progress / Recently Completed
+- [x] Tier 3 vision: Local model loader (Moondream2, Phi-3-Vision, YOLO)
+- [x] Windows Graphics Capture implementation (`windows-capture` DirectX session with automatic GDI BitBlt fallback)
+- [x] macOS ScreenCaptureKit / Linux PipeWire multi-platform capture architecture
+- [x] IPC command bridge (`send_message`, `capture_screen`, `save_settings`, etc.)
+- [x] Frontend modular separation of concerns: `components/`, `views/`, `services/`, `styles/`, `types/`, `utils/`
+- [x] Freehand drawing with pressure + Catmull-Rom smoothing
 - [x] Skia WASM integration for frontend renderer (hardware-accelerated CanvasKit surface with animated drawing)
 - [x] KaTeX math rendering in frontend (inline $...$ and block $$...$$)
 - [x] Presentation mode (hide all UI, floating HUD, step navigation, F5 toggle)
-- [x] Voice narration (Web Speech API + SSML)
-- [x] Export to Mermaid/Excalidraw/PlantUML/Manim
-- [x] Windows Graphics Capture implementation (`windows-capture` DirectX session with automatic GDI BitBlt fallback)
-- [x] macOS ScreenCaptureKit / Linux PipeWire multi-platform capture architecture and stubs
+- [x] Voice narration with multi-language support (ja-JP, zh-CN, hi-IN, es-ES, fr-FR, de-DE)
+- [x] Multi-format export: Mermaid, Excalidraw, PlantUML, and Manim Python code
+- [x] Extensible plugin system (`PluginManager` with Graphviz DOT, LaTeX TikZ, Grid layout)
+- [x] Collaborative mode (`CollaborationService` for shared overlay synchronization, peer awareness, live strokes)
+- [x] Advanced gesture recognition (pinch-zoom, rotate, pan, reset)
+- [x] Local LLM via llama.cpp sidecar (`nemotron-3-4b-int4` for RTX 4060 8GB)
+- [x] Robust local chat persistence: auto-titling, in-memory fallback, and JSON export/import
+- [x] Comprehensive QA and E2E test suite (58 Vitest tests + 10 Rust unit/integration tests)
 
-### 📋 Planned (Post-v1.0)
-- [x] Plugin system (custom element types, layout algorithms, export formats)
-- [x] Collaborative mode (WebRTC + Yjs for shared overlay)
-- [x] Manim code export for video generation
-- [x] Advanced gesture recognition (pinch-zoom, rotate)
-- [x] Multi-language voice support
-- [x] Local LLM via llama.cpp sidecar (Nemotron-3-4B-int4 for RTX 4060 8GB)
+### 📋 Next Steps & Distribution Roadmap (v0.2.0+)
+- [ ] Packaging & Release: Generate signed Windows MSI / NSIS installer (`npm run tauri:build`)
+- [ ] Bundling llama-server executable sidecar into Tauri distribution bundle
+- [ ] Hardware stylus pen tilt and pressure calibration curves
+- [ ] WebGPU compute shaders for dynamic particle simulation in physics visualizations
 
 ## Gotchas / Quirks
 
@@ -305,4 +329,4 @@ tokio = { version = "1.38", features = ["full"] }
 
 ---
 
-*Last updated: 2026-10-19 | Version 0.1.0 | Architecture: Tauri 2 + Rust + Skia + ONNX*
+*Last updated: 2026-10-25 | Version 0.1.0 | Architecture: Tauri 2 + Rust + Skia WASM + Local AI*
