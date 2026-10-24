@@ -123,14 +123,22 @@ fn main() {
             let overlay_state = Arc::new(Mutex::new(overlay_manager));
             app.manage(overlay_state.clone());
 
-            // Pre-initialize overlay window in background so it's ready immediately
+            // Pre-initialize overlay window in background and show it immediately on launch
             let o = overlay_state.clone();
             tauri::async_runtime::spawn(async move {
-                let mut m = o.lock().await;
-                if let Err(e) = m.initialize().await {
-                    tracing::error!("Failed to pre-initialize overlay window: {:?}", e);
-                } else {
-                    tracing::info!("Overlay window pre-initialized successfully");
+                let init_res = {
+                    let mut m = o.lock().await;
+                    m.initialize().await.map_err(|e| e.to_string())
+                };
+                match init_res {
+                    Ok(()) => {
+                        tracing::info!("Overlay window pre-initialized successfully");
+                        let mut m = o.lock().await;
+                        m.show().await;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to pre-initialize overlay window: {}", e);
+                    }
                 }
             });
 
