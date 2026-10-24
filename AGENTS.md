@@ -166,7 +166,7 @@ unfold/
 
 ### 📋 Planned (Post-v1.0)
 - [x] Plugin system (custom element types, layout algorithms, export formats)
-- [ ] Collaborative mode (WebRTC + Yjs for shared overlay)
+- [x] Collaborative mode (WebRTC + Yjs for shared overlay)
 - [x] Manim code export for video generation
 - [x] Advanced gesture recognition (pinch-zoom, rotate)
 - [x] Multi-language voice support
