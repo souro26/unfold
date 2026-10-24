@@ -6,6 +6,7 @@ export interface SidebarCallbacks {
   onNewChat: () => void;
   onOpenSettings: () => void;
   onToggleClickThrough: () => void;
+  onDeleteConversation?: (id: string) => void;
 }
 
 export class SidebarComponent {
@@ -44,21 +45,37 @@ export class SidebarComponent {
     this.listEl.innerHTML = '';
 
     conversations.forEach((conv) => {
-      const btn = document.createElement('button');
-      btn.className = `conversation-item ${conv.id === activeId ? 'active' : ''}`;
-      btn.dataset.id = conv.id;
-      btn.innerHTML = `
+      const item = document.createElement('div');
+      item.className = `conversation-item ${conv.id === activeId ? 'active' : ''}`;
+      item.dataset.id = conv.id;
+      item.innerHTML = `
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
         </svg>
         <span class="title-text">${escapeHtml(conv.title || 'Conversation')}</span>
+        <button class="delete-conv-btn" aria-label="Delete conversation" title="Delete conversation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
       `;
 
-      btn.addEventListener('click', () => {
+      item.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('.delete-conv-btn')) return;
         this.callbacks.onSelectConversation(conv.id);
       });
 
-      this.listEl.appendChild(btn);
+      const delBtn = item.querySelector('.delete-conv-btn');
+      delBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.callbacks.onDeleteConversation) {
+          this.callbacks.onDeleteConversation(conv.id);
+        }
+      });
+
+      this.listEl.appendChild(item);
     });
   }
 

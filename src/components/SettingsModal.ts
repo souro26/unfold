@@ -49,6 +49,7 @@ export class SettingsModalComponent {
               <option value="groq" ${settings.llm_provider === 'groq' ? 'selected' : ''}>Groq</option>
               <option value="openai" ${settings.llm_provider === 'openai' ? 'selected' : ''}>OpenAI</option>
               <option value="ollama" ${settings.llm_provider === 'ollama' ? 'selected' : ''}>Ollama (Local)</option>
+              <option value="llama_cpp" ${settings.llm_provider === 'llama_cpp' ? 'selected' : ''}>llama.cpp Sidecar (Local)</option>
             </select>
           </div>
           <div class="form-group">
@@ -56,8 +57,9 @@ export class SettingsModalComponent {
             <input type="text" id="modelInput" class="setting-input" value="${escapeHtml(settings.model || 'gemini-1.5-flash')}" placeholder="e.g. gemini-1.5-flash" />
           </div>
           <div class="form-group">
-            <label for="apiKeyInput">API Key</label>
+            <label for="apiKeyInput" id="apiKeyLabel">API Key</label>
             <input type="password" id="apiKeyInput" class="setting-input" value="${escapeHtml(settings.api_key || '')}" placeholder="Enter your API key" />
+            <span class="setting-hint" id="apiKeyHint" style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;"></span>
           </div>
         </div>
         <div class="modal-footer">
@@ -70,6 +72,33 @@ export class SettingsModalComponent {
     document.body.appendChild(overlay);
     this.modalEl = overlay;
 
+    const providerSelect = overlay.querySelector('#providerSelect') as HTMLSelectElement;
+    const modelInput = overlay.querySelector('#modelInput') as HTMLInputElement;
+    const apiKeyHint = overlay.querySelector('#apiKeyHint') as HTMLElement;
+    const apiKeyInput = overlay.querySelector('#apiKeyInput') as HTMLInputElement;
+
+    const updateProviderHints = () => {
+      const val = providerSelect.value;
+      if (val === 'llama_cpp') {
+        apiKeyHint.textContent = 'Optional for local models (defaults to http://localhost:8080/v1)';
+        apiKeyInput.placeholder = 'Optional';
+        if (!modelInput.value || modelInput.value.includes('gemini')) {
+          modelInput.value = 'nemotron-3-4b-int4';
+        }
+      } else if (val === 'ollama') {
+        apiKeyHint.textContent = 'Optional for local models (defaults to http://localhost:11434)';
+        apiKeyInput.placeholder = 'Optional';
+        if (!modelInput.value || modelInput.value.includes('gemini')) {
+          modelInput.value = 'llama3';
+        }
+      } else {
+        apiKeyHint.textContent = 'Required for cloud model inference';
+        apiKeyInput.placeholder = 'Enter your API key';
+      }
+    };
+    providerSelect.addEventListener('change', updateProviderHints);
+    updateProviderHints();
+
     // Event listeners
     overlay.querySelector('#closeSettingsBtn')?.addEventListener('click', () => this.close());
     overlay.querySelector('#cancelSettingsBtn')?.addEventListener('click', () => this.close());
@@ -78,9 +107,20 @@ export class SettingsModalComponent {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) this.close();
     });
+
+    this.onKeyDownListener = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') this.close();
+    };
+    document.addEventListener('keydown', this.onKeyDownListener);
   }
 
-  private async save(): Promise<void> {
+  private onKeyDownListener?: (e: KeyboardEvent) => void;
+
+  public isOpen(): boolean {
+    return !!this.modalEl && document.body.contains(this.modalEl);
+  }
+
+  public async save(): Promise<void> {
     if (!this.modalEl) return;
     const providerSelect = this.modalEl.querySelector('#providerSelect') as HTMLSelectElement;
     const modelInput = this.modalEl.querySelector('#modelInput') as HTMLInputElement;
@@ -107,13 +147,13 @@ export class SettingsModalComponent {
   }
 
   public close(): void {
+    if (this.onKeyDownListener) {
+      document.removeEventListener('keydown', this.onKeyDownListener);
+      this.onKeyDownListener = undefined;
+    }
     if (this.modalEl) {
       this.modalEl.remove();
       this.modalEl = null;
     }
-  }
-
-  public isOpen(): boolean {
-    return !!this.modalEl;
   }
 }

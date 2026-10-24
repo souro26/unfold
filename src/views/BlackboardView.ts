@@ -261,6 +261,7 @@ export class BlackboardView {
     this.currentSteps = steps;
     this.currentStepIndex = 0;
     this.overlayEl?.classList.add('visible');
+    this.renderCurrentStep();
 
     // Attempt hardware-accelerated Skia WASM initialization
     const skiaLoaded = await this.skiaRenderer.init();
@@ -270,7 +271,7 @@ export class BlackboardView {
       this.skiaRenderer.attach(this.canvasEl);
     }
 
-    this.renderCurrentStep();
+    this.drawCanvas();
   }
 
   public close(): void {

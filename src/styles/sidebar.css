@@ -268,6 +268,31 @@
   text-align: left;
 }
 
+.delete-conv-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.conversation-item:hover .delete-conv-btn {
+  opacity: 0.8;
+}
+
+.delete-conv-btn:hover {
+  opacity: 1 !important;
+  background: rgba(255, 68, 68, 0.15);
+  color: var(--danger-color);
+}
+
 .sidebar.collapsed .conversation-item {
   justify-content: center;
   padding: 10px;

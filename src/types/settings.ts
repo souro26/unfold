@@ -1,4 +1,4 @@
-export type LLMProvider = 'groq' | 'gemini' | 'ollama' | 'openai';
+export type LLMProvider = 'groq' | 'gemini' | 'ollama' | 'openai' | 'llama_cpp' | 'local';
 
 export interface Settings {
   llm_provider: LLMProvider;

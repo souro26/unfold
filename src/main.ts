@@ -5,6 +5,7 @@ import {
   addMessageToConversation,
   getActiveConversationId,
   setActiveConversationId,
+  deleteConversation,
 } from './services/storage';
 import { setClickThrough, toggleOverlay, sendMessage, captureScreen } from './services/ipc';
 import { renderMarkdown } from './utils/markdown';
@@ -39,6 +40,7 @@ export class App {
       onNewChat: () => this.startNewChat(),
       onOpenSettings: () => this.settingsModal.open(),
       onToggleClickThrough: () => this.toggleClickThrough(),
+      onDeleteConversation: (id) => this.handleDeleteConversation(id),
     });
 
     this.composer = new ComposerComponent({
@@ -89,6 +91,7 @@ export class App {
   }
 
   public selectConversation(id: string): void {
+    this.conversations = loadConversations();
     this.activeConversationId = id;
     setActiveConversationId(id);
     this.sidebar.renderConversations(this.conversations, id);
@@ -109,6 +112,20 @@ export class App {
     this.selectConversation(conv.id);
     this.homeView.show();
     this.composer.focus();
+  }
+
+  public handleDeleteConversation(id: string): void {
+    deleteConversation(id);
+    this.conversations = loadConversations();
+    if (this.activeConversationId === id) {
+      if (this.conversations.length > 0) {
+        this.selectConversation(this.conversations[0].id);
+      } else {
+        this.startNewChat();
+      }
+    } else {
+      this.sidebar.renderConversations(this.conversations, this.activeConversationId);
+    }
   }
 
   public renderMessages(messages: Message[]): void {
@@ -168,7 +185,9 @@ export class App {
   }
 
   public async handleSendMessage(text: string): Promise<void> {
-    if (!text || this.isStreaming) return;
+    const trimmed = text ? text.trim() : '';
+    if (!trimmed || this.isStreaming) return;
+    text = trimmed;
 
     if (!this.activeConversationId) {
       this.startNewChat();
