@@ -214,6 +214,8 @@ export class App {
     };
 
     addMessageToConversation(this.activeConversationId!, userMsg);
+    this.conversations = loadConversations();
+    this.sidebar.renderConversations(this.conversations, this.activeConversationId);
     this.appendMessageDOM(userMsg);
     this.scrollToBottom();
 
@@ -258,7 +260,13 @@ export class App {
       this.sidebar.renderConversations(this.conversations, this.activeConversationId);
     } catch (err) {
       console.error('Failed to get AI response:', err);
-      textEl.innerHTML = `<span style="color:var(--danger-color)">Error: Failed to get response. Please check your API key in Settings.</span>`;
+      const errText = 'Error: Failed to get response. Please check your API key in Settings.';
+      textEl.innerHTML = `<span style="color:var(--danger-color)">${errText}</span>`;
+      assistantMsg.content = errText;
+      assistantMsg.streaming = false;
+      addMessageToConversation(this.activeConversationId!, assistantMsg);
+      this.conversations = loadConversations();
+      this.sidebar.renderConversations(this.conversations, this.activeConversationId);
     } finally {
       this.isStreaming = false;
       this.composer.setDisabled(false);

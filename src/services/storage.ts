@@ -4,18 +4,26 @@ import { generateId } from '../utils/helpers';
 const STORAGE_KEY = 'unfold_conversations';
 const CURRENT_CONV_KEY = 'unfold_current_conv_id';
 
+let memoryCache: Conversation[] | null = null;
+
 export function loadConversations(): Conversation[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    if (!raw) {
+      memoryCache = [];
+      return [];
+    }
+    const list = JSON.parse(raw);
+    memoryCache = list;
+    return list;
   } catch (err) {
-    console.error('Failed to load conversations from storage:', err);
-    return [];
+    console.error('Failed to load conversations from storage, using memory cache:', err);
+    return memoryCache || [];
   }
 }
 
 export function saveConversations(conversations: Conversation[]): void {
+  memoryCache = conversations;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
   } catch (err) {
@@ -24,14 +32,22 @@ export function saveConversations(conversations: Conversation[]): void {
 }
 
 export function getActiveConversationId(): string | null {
-  return localStorage.getItem(CURRENT_CONV_KEY);
+  try {
+    return localStorage.getItem(CURRENT_CONV_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function setActiveConversationId(id: string | null): void {
-  if (id) {
-    localStorage.setItem(CURRENT_CONV_KEY, id);
-  } else {
-    localStorage.removeItem(CURRENT_CONV_KEY);
+  try {
+    if (id) {
+      localStorage.setItem(CURRENT_CONV_KEY, id);
+    } else {
+      localStorage.removeItem(CURRENT_CONV_KEY);
+    }
+  } catch (err) {
+    console.error('Failed to set active conversation in local storage:', err);
   }
 }
 
@@ -54,6 +70,13 @@ export function addMessageToConversation(convId: string, message: Message): Conv
   const list = loadConversations();
   const conv = list.find((c) => c.id === convId);
   if (conv) {
+    // Auto-update conversation title from initial user message if title is default
+    if ((conv.title === 'New Conversation' || conv.title === 'New chat') && message.role === 'user') {
+      const cleanSnippet = message.content.trim().slice(0, 36);
+      if (cleanSnippet) {
+        conv.title = cleanSnippet;
+      }
+    }
     conv.messages.push(message);
     conv.updated_at = Date.now();
     saveConversations(list);
@@ -70,3 +93,21 @@ export function deleteConversation(convId: string): Conversation[] {
   }
   return list;
 }
+
+export function exportConversationsJSON(): string {
+  return JSON.stringify(loadConversations(), null, 2);
+}
+
+export function importConversationsJSON(jsonString: string): boolean {
+  try {
+    const parsed = JSON.parse(jsonString);
+    if (Array.isArray(parsed)) {
+      saveConversations(parsed);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+

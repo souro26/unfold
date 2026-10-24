@@ -7,6 +7,8 @@ import {
   deleteConversation,
   getActiveConversationId,
   setActiveConversationId,
+  exportConversationsJSON,
+  importConversationsJSON,
 } from '../src/services/storage';
 
 describe('Storage Service', () => {
@@ -62,5 +64,30 @@ describe('Storage Service', () => {
 
     setActiveConversationId(null);
     expect(getActiveConversationId()).toBeNull();
+  });
+
+  it('addMessageToConversation auto-titles new conversations based on first user message', () => {
+    const conv = createNewConversation('New chat');
+    addMessageToConversation(conv.id, {
+      role: 'user',
+      content: 'Explain quantum computing basics in detail',
+      timestamp: Date.now(),
+    });
+
+    const list = loadConversations();
+    expect(list[0].title).toBe('Explain quantum computing basics in ');
+  });
+
+  it('exportConversationsJSON and importConversationsJSON successfully backup and restore chats', () => {
+    createNewConversation('Backup Test Chat');
+    const json = exportConversationsJSON();
+    expect(json).toContain('Backup Test Chat');
+
+    localStorage.clear();
+    const success = importConversationsJSON(json);
+    expect(success).toBe(true);
+
+    const reloaded = loadConversations();
+    expect(reloaded.some((c) => c.title === 'Backup Test Chat')).toBe(true);
   });
 });

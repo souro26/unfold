@@ -252,13 +252,13 @@ describe('End-to-End UI & QA Test Suite', () => {
         },
       });
 
-      app.appendMessageDOM({
+      const msgEl = app.appendMessageDOM({
         role: 'assistant',
         content: '```rust\nfn main() {}\n```',
         timestamp: Date.now(),
       });
 
-      const copyBtn = document.querySelector('.copy-code-btn') as HTMLButtonElement;
+      const copyBtn = msgEl.querySelector('.copy-code-btn') as HTMLButtonElement;
       expect(copyBtn).toBeTruthy();
 
       copyBtn.click();
