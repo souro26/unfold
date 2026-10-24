@@ -143,4 +143,42 @@ describe('Views and Navigation', () => {
 
     downloadSpy.mockRestore();
   });
+
+  it('BlackboardView handles advanced gestures: pinch-zoom, rotate, pan, and reset', async () => {
+    const bbView = new BlackboardView();
+    const steps = [
+      { step: 1, title: 'Step 1 Title', explanation: 'Step 1 Details' },
+    ];
+    await bbView.open(steps);
+
+    // Initial viewport
+    expect(bbView.getViewport()).toEqual({
+      zoom: 1.0,
+      rotation: 0,
+      panX: 0,
+      panY: 0,
+    });
+
+    // Pinch-zoom
+    bbView.handlePinchZoom(1.5);
+    expect(bbView.getViewport().zoom).toBe(1.5);
+
+    // Rotate
+    bbView.handleRotate(Math.PI / 4);
+    expect(bbView.getViewport().rotation).toBeCloseTo(Math.PI / 4, 4);
+
+    // Pan
+    bbView.handlePan(45, -30);
+    expect(bbView.getViewport().panX).toBe(45);
+    expect(bbView.getViewport().panY).toBe(-30);
+
+    // Reset viewport
+    bbView.resetViewport();
+    expect(bbView.getViewport()).toEqual({
+      zoom: 1.0,
+      rotation: 0,
+      panX: 0,
+      panY: 0,
+    });
+  });
 });

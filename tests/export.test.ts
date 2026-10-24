@@ -86,4 +86,27 @@ describe('SpeechService SSML Parser', () => {
     const parsed = SpeechService.parseSSML(markdown);
     expect(parsed).toBe('Run cargo test to verify all packages.');
   });
+
+  it('detectLanguage should accurately detect scripts across multiple languages', () => {
+    expect(SpeechService.detectLanguage('こんにちは世界')).toBe('ja-JP');
+    expect(SpeechService.detectLanguage('你好，这是一个测试')).toBe('zh-CN');
+    expect(SpeechService.detectLanguage('नमस्ते, यह एक परीक्षण है')).toBe('hi-IN');
+    expect(SpeechService.detectLanguage('¿Cómo estás hoy?')).toBe('es-ES');
+    expect(SpeechService.detectLanguage('Bonjour le monde, c\'est un test')).toBe('fr-FR');
+    expect(SpeechService.detectLanguage('Guten Tag, das ist ein schöner Tag')).toBe('de-DE');
+    expect(SpeechService.detectLanguage('Distributed consensus algorithms')).toBe('en-US');
+  });
+
+  it('getSupportedLanguages lists major localized languages', () => {
+    const languages = SpeechService.getSupportedLanguages();
+    const codes = languages.map((l) => l.code);
+    expect(codes).toContain('en-US');
+    expect(codes).toContain('es-ES');
+    expect(codes).toContain('fr-FR');
+    expect(codes).toContain('de-DE');
+    expect(codes).toContain('ja-JP');
+    expect(codes).toContain('zh-CN');
+    expect(codes).toContain('hi-IN');
+  });
 });
+

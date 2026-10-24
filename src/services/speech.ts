@@ -2,14 +2,35 @@ export interface SpeechOptions {
   rate?: number;
   pitch?: number;
   voiceName?: string;
+  lang?: string;
   onStart?: () => void;
   onEnd?: () => void;
   onError?: (err: any) => void;
 }
 
+export interface SpeechLanguage {
+  code: string;
+  name: string;
+  nativeName: string;
+}
+
 export class SpeechService {
   private static synth: SpeechSynthesis | null = typeof window !== 'undefined' ? window.speechSynthesis : null;
   private static selectedVoice: SpeechSynthesisVoice | null = null;
+  private static selectedLang: string = 'en-US';
+
+  public static readonly SUPPORTED_LANGUAGES: SpeechLanguage[] = [
+    { code: 'en-US', name: 'English (US)', nativeName: 'English' },
+    { code: 'en-GB', name: 'English (UK)', nativeName: 'English' },
+    { code: 'es-ES', name: 'Spanish', nativeName: 'Español' },
+    { code: 'fr-FR', name: 'French', nativeName: 'Français' },
+    { code: 'de-DE', name: 'German', nativeName: 'Deutsch' },
+    { code: 'ja-JP', name: 'Japanese', nativeName: '日本語' },
+    { code: 'zh-CN', name: 'Chinese (Simplified)', nativeName: '简体中文' },
+    { code: 'hi-IN', name: 'Hindi', nativeName: 'हिन्दी' },
+    { code: 'pt-BR', name: 'Portuguese (Brazil)', nativeName: 'Português' },
+    { code: 'it-IT', name: 'Italian', nativeName: 'Italiano' },
+  ];
 
   static isSupported(): boolean {
     return !!this.synth;
@@ -20,12 +41,53 @@ export class SpeechService {
     return this.synth.getVoices();
   }
 
+  static getSupportedLanguages(): SpeechLanguage[] {
+    return this.SUPPORTED_LANGUAGES;
+  }
+
   static setVoice(voiceName: string): void {
     const voices = this.getVoices();
     const found = voices.find((v) => v.name === voiceName || v.lang.startsWith(voiceName));
     if (found) {
       this.selectedVoice = found;
+      this.selectedLang = found.lang;
     }
+  }
+
+  static setLanguage(langCode: string): void {
+    this.selectedLang = langCode;
+    const voices = this.getVoices();
+    // Find best matching voice for this language
+    const langPrefix = langCode.split('-')[0].toLowerCase();
+    const exactMatch = voices.find((v) => v.lang.toLowerCase() === langCode.toLowerCase());
+    const prefixMatch = voices.find((v) => v.lang.toLowerCase().startsWith(langPrefix));
+    this.selectedVoice = exactMatch || prefixMatch || null;
+  }
+
+  static getCurrentLanguage(): string {
+    return this.selectedLang;
+  }
+
+  /**
+   * Lightweight language detector based on unicode scripts
+   */
+  public static detectLanguage(text: string): string {
+    // Japanese Hiragana & Katakana
+    if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP';
+    // Chinese characters (Kanji/Hanzi) without Japanese kana
+    if (/[\u4E00-\u9FFF]/.test(text)) return 'zh-CN';
+    // Devanagari (Hindi)
+    if (/[\u0900-\u097F]/.test(text)) return 'hi-IN';
+    // Cyrillic
+    if (/[\u0400-\u04FF]/.test(text)) return 'ru-RU';
+    // Spanish inverted punctuation or common accented chars / words
+    if (/[¿¡áéíóúñ]/i.test(text) || /\b(hola|mundo|por|para|como|está|estás)\b/i.test(text)) return 'es-ES';
+    // French accented chars or words
+    if (/[àâçèéêëîïôûùüÿœæ]/i.test(text) || /\b(bonjour|monde|vous|nous|pour|dans|avec|c'est)\b/i.test(text)) return 'fr-FR';
+    // German umlauts, eszett or words
+    if (/[äöüß]/i.test(text) || /\b(und|der|die|das|ist|nicht|mit|ein|eine|schöner)\b/i.test(text)) return 'de-DE';
+
+    return 'en-US';
   }
 
   /**
@@ -57,11 +119,19 @@ export class SpeechService {
     utterance.rate = options.rate ?? 1.0;
     utterance.pitch = options.pitch ?? 1.0;
 
-    if (this.selectedVoice) {
+    const targetLang = options.lang || this.selectedLang || this.detectLanguage(cleanText);
+    utterance.lang = targetLang;
+
+    if (this.selectedVoice && this.selectedVoice.lang.toLowerCase().startsWith(targetLang.split('-')[0].toLowerCase())) {
       utterance.voice = this.selectedVoice;
     } else if (options.voiceName) {
       const v = this.getVoices().find((voice) => voice.name === options.voiceName);
       if (v) utterance.voice = v;
+    } else {
+      // Find suitable voice for targetLang
+      const prefix = targetLang.split('-')[0].toLowerCase();
+      const match = this.getVoices().find((v) => v.lang.toLowerCase().startsWith(prefix));
+      if (match) utterance.voice = match;
     }
 
     if (options.onStart) utterance.onstart = () => options.onStart!();

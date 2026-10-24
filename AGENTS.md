@@ -168,8 +168,8 @@ unfold/
 - [x] Plugin system (custom element types, layout algorithms, export formats)
 - [ ] Collaborative mode (WebRTC + Yjs for shared overlay)
 - [x] Manim code export for video generation
-- [ ] Advanced gesture recognition (pinch-zoom, rotate)
-- [ ] Multi-language voice support
+- [x] Advanced gesture recognition (pinch-zoom, rotate)
+- [x] Multi-language voice support
 - [x] Local LLM via llama.cpp sidecar (Nemotron-3-4B-int4 for RTX 4060 8GB)
 
 ## Gotchas / Quirks

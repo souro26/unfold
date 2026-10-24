@@ -41,6 +41,22 @@ export class BlackboardView {
   private playTimer: ReturnType<typeof setTimeout> | null = null;
   private skiaRenderer: SkiaRenderer;
 
+  // Advanced gesture recognition state
+  private viewport = {
+    zoom: 1.0,
+    rotation: 0,
+    panX: 0,
+    panY: 0,
+  };
+  private touchGesture = {
+    initialDistance: 0,
+    initialAngle: 0,
+    initialZoom: 1.0,
+    initialRotation: 0,
+    lastPanX: 0,
+    lastPanY: 0,
+  };
+
   constructor() {
     this.overlayEl = document.getElementById('vizOverlay') as HTMLElement;
     this.canvasEl = document.getElementById('vizCanvas') as HTMLCanvasElement;
@@ -76,6 +92,7 @@ export class BlackboardView {
 
     this.skiaRenderer = new SkiaRenderer();
     this.bindEvents();
+    this.setupGestureListeners();
   }
 
   private bindEvents(): void {
@@ -136,7 +153,108 @@ export class BlackboardView {
           this.exitPresentationMode();
         }
       }
+
+      // Reset zoom and rotation with '0'
+      if (e.key === '0' || e.key === 'r') {
+        this.resetViewport();
+      }
     });
+  }
+
+  private setupGestureListeners(): void {
+    if (!this.canvasEl) return;
+
+    // Trackpad / Mouse wheel pinch-to-zoom and pan
+    this.canvasEl.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (e.ctrlKey) {
+        // Pinch-zoom
+        const zoomDelta = e.deltaY < 0 ? 1.08 : 0.92;
+        this.handlePinchZoom(zoomDelta);
+      } else {
+        // Pan
+        this.handlePan(-e.deltaX, -e.deltaY);
+      }
+    }, { passive: false });
+
+    // Multi-touch pinch-to-zoom and rotation gestures
+    this.canvasEl.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        this.touchGesture.initialDistance = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        this.touchGesture.initialAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+        this.touchGesture.initialZoom = this.viewport.zoom;
+        this.touchGesture.initialRotation = this.viewport.rotation;
+        this.touchGesture.lastPanX = (t1.clientX + t2.clientX) / 2;
+        this.touchGesture.lastPanY = (t1.clientY + t2.clientY) / 2;
+      }
+    }, { passive: false });
+
+    this.canvasEl.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currentDistance = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const currentAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+
+        // Calculate pinch scale
+        if (this.touchGesture.initialDistance > 0) {
+          const scale = currentDistance / this.touchGesture.initialDistance;
+          this.viewport.zoom = Math.max(0.2, Math.min(5.0, this.touchGesture.initialZoom * scale));
+        }
+
+        // Calculate rotation
+        const angleDiff = currentAngle - this.touchGesture.initialAngle;
+        this.viewport.rotation = this.touchGesture.initialRotation + angleDiff;
+
+        // Calculate pan midpoint shift
+        const midX = (t1.clientX + t2.clientX) / 2;
+        const midY = (t1.clientY + t2.clientY) / 2;
+        this.viewport.panX += midX - this.touchGesture.lastPanX;
+        this.viewport.panY += midY - this.touchGesture.lastPanY;
+        this.touchGesture.lastPanX = midX;
+        this.touchGesture.lastPanY = midY;
+
+        this.drawCanvas();
+      }
+    }, { passive: false });
+
+    this.canvasEl.addEventListener('dblclick', () => {
+      this.resetViewport();
+    });
+  }
+
+  public getViewport(): { zoom: number; rotation: number; panX: number; panY: number } {
+    return { ...this.viewport };
+  }
+
+  public resetViewport(): void {
+    this.viewport = {
+      zoom: 1.0,
+      rotation: 0,
+      panX: 0,
+      panY: 0,
+    };
+    this.drawCanvas();
+  }
+
+  public handlePinchZoom(scaleMultiplier: number): void {
+    this.viewport.zoom = Math.max(0.2, Math.min(5.0, this.viewport.zoom * scaleMultiplier));
+    this.drawCanvas();
+  }
+
+  public handleRotate(radiansDelta: number): void {
+    this.viewport.rotation += radiansDelta;
+    this.drawCanvas();
+  }
+
+  public handlePan(dx: number, dy: number): void {
+    this.viewport.panX += dx;
+    this.viewport.panY += dy;
+    this.drawCanvas();
   }
 
   public async open(steps: BlackboardStep[]): Promise<void> {
@@ -242,6 +360,14 @@ export class BlackboardView {
     if (!this.ctx || !this.canvasEl) return;
     this.ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
 
+    this.ctx.save();
+    const cx = this.canvasEl.width / 2;
+    const cy = this.canvasEl.height / 2;
+    this.ctx.translate(cx + this.viewport.panX, cy + this.viewport.panY);
+    this.ctx.rotate(this.viewport.rotation);
+    this.ctx.scale(this.viewport.zoom, this.viewport.zoom);
+    this.ctx.translate(-cx, -cy);
+
     this.drawGrid();
 
     if (step.elements) {
@@ -271,6 +397,8 @@ export class BlackboardView {
         }
       });
     }
+
+    this.ctx.restore();
   }
 
   private drawGrid(): void {
