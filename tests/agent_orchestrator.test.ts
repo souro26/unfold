@@ -12,10 +12,10 @@ describe('AgentOrchestrator Multi-Layer Reasoning System', () => {
     expect(pedagogy.coreIntuition).toContain('limit of a secant line');
     expect(pedagogy.progressionStages.length).toBeGreaterThanOrEqual(4);
 
-    // Verify critical learning milestones
-    expect(pedagogy.progressionStages[0].title).toContain('Secant');
-    expect(pedagogy.progressionStages[1].title).toContain('Limiting Process');
-    expect(pedagogy.progressionStages[2].title).toContain('Tangent Line');
+    // Verify critical learning milestones: Circle -> Tangent Line -> Contrast with Secant -> Perpendicularity
+    expect(pedagogy.progressionStages[0].title).toContain('Circle');
+    expect(pedagogy.progressionStages[1].title).toContain('Tangent Line');
+    expect(pedagogy.progressionStages[2].title).toContain('Secant');
     expect(pedagogy.progressionStages[3].title).toContain('Perpendicularity');
 
     // Verify common misconceptions identified
@@ -42,19 +42,23 @@ describe('AgentOrchestrator Multi-Layer Reasoning System', () => {
     expect(spatial.colorPalette.secondary).toBe('#50fa7b');
     expect(spatial.colorPalette.accent).toBe('#bd93f9');
 
-    // Step 1: Must contain circle, P, Q, and secant line
+    // Step 1: Must contain circle, Center O, and Point P
     const step1 = spatial.stepBlueprints[0];
     expect(step1.elements.some((e) => e.type === 'circle')).toBe(true);
-    expect(step1.elements.some((e) => e.type === 'line' && e.text === 'Secant Line')).toBe(true);
+    expect(step1.elements.some((e) => e.text?.includes('Point of Contact P'))).toBe(true);
 
-    // Step 3: Must contain tangent line touching at P and 90 degree marker
+    // Step 2: Must contain tangent line touching circle at point P
+    const step2 = spatial.stepBlueprints[1];
+    expect(step2.elements.some((e) => e.type === 'line' && e.text?.includes('Tangent Line'))).toBe(true);
+
+    // Step 3: Must contrast Tangent with Secant line
     const step3 = spatial.stepBlueprints[2];
-    expect(step3.elements.some((e) => e.type === 'line' && e.text?.includes('Tangent Line'))).toBe(true);
-    expect(step3.elements.some((e) => e.type === 'path')).toBe(true);
+    expect(step3.elements.some((e) => e.type === 'line' && e.text?.includes('Secant Line'))).toBe(true);
 
-    // Step 4: Must contain tangential velocity vector arrow
+    // Step 4: Must contain 90-degree perpendicular marker and tangential velocity vector arrow
     const step4 = spatial.stepBlueprints[3];
     expect(step4.elements.some((e) => e.type === 'arrow' && e.text?.includes('Velocity'))).toBe(true);
+    expect(step4.elements.some((e) => e.type === 'path')).toBe(true);
   });
 
   it('Layer 3: Synthesizes master drawing prompt incorporating pedagogy and spatial blueprint', () => {

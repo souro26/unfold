@@ -236,4 +236,85 @@ describe('Views and Navigation', () => {
     renderer.detach();
     expect(renderer.isAvailable()).toBe(false);
   });
+
+  it('BlackboardView accumulates elements across scenes for continuous whiteboard video drawing', async () => {
+    const bbView = new BlackboardView();
+    const steps = [
+      {
+        step: 1,
+        title: 'Circle Foundation',
+        explanation: 'We draw the base circle with center O.',
+        elements: [
+          { id: 'c1', type: 'circle' as const, start: { x: 450, y: 280 }, radius: 100 },
+          { id: 'pt_o', type: 'circle' as const, start: { x: 450, y: 280 }, radius: 4, text: 'O' },
+        ],
+      },
+      {
+        step: 2,
+        title: 'Tangent Line',
+        explanation: 'Now we draw the tangent line touching at point P.',
+        elements: [
+          { id: 'tangent_line', type: 'line' as const, start: { x: 200, y: 180 }, end: { x: 700, y: 180 }, text: 'Tangent Line' },
+        ],
+      },
+    ];
+
+    await bbView.open(steps);
+
+    // Scene 1: Has 2 elements (circle + center O)
+    const acc1 = bbView.getAccumulatedStep(0);
+    expect(acc1.elements.length).toBe(2);
+    expect(acc1.elements.some((e) => e.id === 'c1')).toBe(true);
+
+    // Scene 2: Retains Scene 1 elements and adds tangent line (total 3 elements)
+    const acc2 = bbView.getAccumulatedStep(1);
+    expect(acc2.elements.length).toBe(3);
+    expect(acc2.elements.some((e) => e.id === 'c1')).toBe(true);
+    expect(acc2.elements.some((e) => e.id === 'tangent_line')).toBe(true);
+
+    bbView.close();
+  });
+
+  it('BlackboardView video stream scrubber, speed cycling, and seeking work smoothly', async () => {
+    const bbView = new BlackboardView();
+    const steps = [
+      {
+        step: 1,
+        title: 'Scene 1: Introduction to Curvature',
+        explanation: 'Here is our detailed overview of geometric curvature in Cartesian space.',
+      },
+      {
+        step: 2,
+        title: 'Scene 2: Tangent Vector Analysis',
+        explanation: 'Examining the derivative and instantaneous velocity vector.',
+      },
+    ];
+
+    await bbView.open(steps);
+    expect(bbView.getVideoTotalDuration()).toBeGreaterThan(0);
+
+    // Initial state: starts at 0s
+    expect(bbView.getVideoCurrentTime()).toBe(0);
+
+    // Seek to 8 seconds
+    bbView.seekToTime(8);
+    expect(bbView.getVideoCurrentTime()).toBe(8);
+
+    // Speed cycling: 1.0x -> 1.25x -> 1.5x -> 2.0x -> 1.0x
+    expect(bbView.getPlaybackSpeed()).toBe(1.0);
+    bbView.cyclePlaybackSpeed();
+    expect(bbView.getPlaybackSpeed()).toBe(1.25);
+    bbView.cyclePlaybackSpeed();
+    expect(bbView.getPlaybackSpeed()).toBe(1.5);
+    bbView.cyclePlaybackSpeed();
+    expect(bbView.getPlaybackSpeed()).toBe(2.0);
+    bbView.cyclePlaybackSpeed();
+    expect(bbView.getPlaybackSpeed()).toBe(1.0);
+
+    // Mute toggle
+    bbView.toggleMute();
+    bbView.toggleMute();
+
+    bbView.close();
+  });
 });

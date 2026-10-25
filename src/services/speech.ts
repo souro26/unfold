@@ -188,6 +188,24 @@ export class SpeechService {
     }
   }
 
+  static pause(): void {
+    if (this.currentAudio && !this.currentAudio.paused) {
+      this.currentAudio.pause();
+    }
+    if (this.synth && this.synth.speaking && !this.synth.paused) {
+      this.synth.pause();
+    }
+  }
+
+  static resume(): void {
+    if (this.currentAudio && this.currentAudio.paused) {
+      this.currentAudio.play();
+    }
+    if (this.synth && this.synth.paused) {
+      this.synth.resume();
+    }
+  }
+
   static isSpeaking(): boolean {
     const isAudioPlaying = !!(this.currentAudio && !this.currentAudio.paused);
     const isSynthSpeaking = !!(this.synth && this.synth.speaking);

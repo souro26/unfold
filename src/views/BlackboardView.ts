@@ -35,6 +35,32 @@ export class BlackboardView {
   private renderModeLabel: HTMLElement | null = null;
   private renderEngine: 'rough' | 'skia' = 'rough';
 
+  // Video Stream Player Elements
+  private videoStreamBar: HTMLElement | null = null;
+  private videoSubtitles: HTMLElement | null = null;
+  private videoSubtitlesText: HTMLElement | null = null;
+  private videoCurrentTimeEl: HTMLElement | null = null;
+  private videoTotalTimeEl: HTMLElement | null = null;
+  private videoScrubber: HTMLInputElement | null = null;
+  private videoProgressFill: HTMLElement | null = null;
+  private videoPlayPauseBtn: HTMLButtonElement | null = null;
+  private videoPlayLabel: HTMLElement | null = null;
+  private videoPlayIcon: SVGElement | null = null;
+  private videoReplayBtn: HTMLButtonElement | null = null;
+  private videoSceneIndicator: HTMLElement | null = null;
+  private videoSpeedBtn: HTMLButtonElement | null = null;
+  private videoMuteBtn: HTMLButtonElement | null = null;
+
+  // Video Streaming State
+  private isVideoPlaying: boolean = false;
+  private videoCurrentTime: number = 0;
+  private videoTotalDuration: number = 40;
+  private playbackSpeed: number = 1.0;
+  private isMuted: boolean = false;
+  private videoAnimFrameId: number | null = null;
+  private lastFrameTimestamp: number = 0;
+  private sceneTimeRanges: { start: number; end: number; duration: number; step: BlackboardStep }[] = [];
+
   // Export elements
   private exportBtn: HTMLButtonElement | null;
   private exportMenu: HTMLElement | null;
@@ -75,7 +101,6 @@ export class BlackboardView {
 
   private currentSteps: BlackboardStep[] = [];
   private currentStepIndex: number = 0;
-  private isPlaying: boolean = false;
   private isPresentation: boolean = false;
   private playTimer: ReturnType<typeof setTimeout> | null = null;
   private skiaRenderer: SkiaRenderer;
@@ -117,6 +142,22 @@ export class BlackboardView {
     this.stepIndicator = document.getElementById('stepIndicator') as HTMLElement;
     this.titleEl = document.getElementById('vizTitle') as HTMLElement;
     this.descEl = document.getElementById('vizDescription') as HTMLElement;
+
+    // Video Stream Player Elements
+    this.videoStreamBar = document.getElementById('videoStreamBar');
+    this.videoSubtitles = document.getElementById('videoSubtitles');
+    this.videoSubtitlesText = document.getElementById('videoSubtitlesText');
+    this.videoCurrentTimeEl = document.getElementById('videoCurrentTime');
+    this.videoTotalTimeEl = document.getElementById('videoTotalTime');
+    this.videoScrubber = document.getElementById('videoScrubber') as HTMLInputElement | null;
+    this.videoProgressFill = document.getElementById('videoProgressFill');
+    this.videoPlayPauseBtn = document.getElementById('videoPlayPauseBtn') as HTMLButtonElement | null;
+    this.videoPlayLabel = document.getElementById('videoPlayLabel');
+    this.videoPlayIcon = document.getElementById('videoPlayIcon') as unknown as SVGElement | null;
+    this.videoReplayBtn = document.getElementById('videoReplayBtn') as HTMLButtonElement | null;
+    this.videoSceneIndicator = document.getElementById('videoSceneIndicator');
+    this.videoSpeedBtn = document.getElementById('videoSpeedBtn') as HTMLButtonElement | null;
+    this.videoMuteBtn = document.getElementById('videoMuteBtn') as HTMLButtonElement | null;
 
     // Export elements
     this.exportBtn = document.getElementById('vizExportBtn') as HTMLButtonElement | null;
@@ -206,6 +247,13 @@ export class BlackboardView {
     this.stepPlayBtn?.addEventListener('click', () => this.toggleAutoplay());
     this.stepVoiceBtn?.addEventListener('click', () => this.narrateCurrentStep());
 
+    // Video Stream Player events
+    this.videoPlayPauseBtn?.addEventListener('click', () => this.toggleVideoPlayback());
+    this.videoReplayBtn?.addEventListener('click', () => this.restartVideo());
+    this.videoScrubber?.addEventListener('input', (e) => this.onScrubberSeek(e));
+    this.videoSpeedBtn?.addEventListener('click', () => this.cyclePlaybackSpeed());
+    this.videoMuteBtn?.addEventListener('click', () => this.toggleMute());
+
     // Export dropdown events
     this.exportBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -268,6 +316,26 @@ export class BlackboardView {
         e.preventDefault();
         this.toggleInspectDrawer();
         return;
+      }
+
+      // Space bar toggles video playback when not typing in text input
+      if ((e.key === ' ' || e.code === 'Space') && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        e.preventDefault();
+        this.toggleVideoPlayback();
+        return;
+      }
+
+      // Left/Right arrow keys seek in video mode
+      if (!['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        if (e.key === 'ArrowRight' && !this.isPresentation) {
+          e.preventDefault();
+          this.seekToTime(this.videoCurrentTime + 5);
+          return;
+        } else if (e.key === 'ArrowLeft' && !this.isPresentation) {
+          e.preventDefault();
+          this.seekToTime(this.videoCurrentTime - 5);
+          return;
+        }
       }
 
       if (this.isPresentation) {
@@ -544,8 +612,10 @@ export class BlackboardView {
   public async open(steps: BlackboardStep[], reasoning?: any, rawJson?: string): Promise<void> {
     this.currentSteps = steps;
     this.currentStepIndex = 0;
+    this.videoCurrentTime = 0;
     this.currentReasoning = reasoning;
     this.currentRawJson = rawJson;
+    this.calculateVideoTimeline();
     this.overlayEl?.classList.add('visible');
     this.renderCurrentStep();
 
@@ -561,16 +631,19 @@ export class BlackboardView {
     }
     this.resizeCanvas();
     this.drawCanvas();
+    this.videoStreamBar?.classList.remove('hidden');
 
-    // Automatically begin playback with speech narration
+    // Automatically begin video playback with speech narration
     if (steps.length > 0) {
-      this.startAutoplay();
+      this.startVideoPlayback();
     }
   }
 
   public close(): void {
-    this.stopAutoplay();
+    this.pauseVideoPlayback();
+    this.stopVideoClock();
     SpeechService.stop();
+    this.videoStreamBar?.classList.add('hidden');
     this.exitPresentationMode();
     this.closeInspectDrawer();
     this.roughRenderer.stopAnimation();
@@ -624,6 +697,26 @@ export class BlackboardView {
     }
   }
 
+  public getAccumulatedStep(targetIndex: number): BlackboardStep {
+    if (this.currentSteps.length === 0) {
+      return { step: 1, title: '', explanation: '', elements: [] };
+    }
+    const safeIndex = Math.max(0, Math.min(this.currentSteps.length - 1, targetIndex));
+    const accumulatedElements: DrawingElement[] = [];
+    for (let i = 0; i <= safeIndex; i++) {
+      const stepElements = this.currentSteps[i]?.elements;
+      if (stepElements && Array.isArray(stepElements)) {
+        accumulatedElements.push(...stepElements);
+      }
+    }
+    return {
+      step: safeIndex + 1,
+      title: this.currentSteps[safeIndex]?.title || '',
+      explanation: this.currentSteps[safeIndex]?.explanation || '',
+      elements: accumulatedElements,
+    };
+  }
+
   public renderCurrentStep(): void {
     if (this.currentSteps.length === 0) {
       if (this.titleEl) this.titleEl.textContent = 'Blackboard';
@@ -634,6 +727,7 @@ export class BlackboardView {
       if (this.stepNextBtn) this.stepNextBtn.disabled = true;
       if (this.hudPrevBtn) this.hudPrevBtn.disabled = true;
       if (this.hudNextBtn) this.hudNextBtn.disabled = true;
+      if (this.videoSubtitles) this.videoSubtitles.classList.add('hidden');
       this.drawCanvas();
       return;
     }
@@ -644,6 +738,8 @@ export class BlackboardView {
     if (this.descEl) this.descEl.textContent = step.explanation;
     if (this.stepIndicator) this.stepIndicator.textContent = stepLabel;
     if (this.hudStepBadge) this.hudStepBadge.textContent = `${stepLabel}: ${step.title}`;
+    this.updateSubtitles();
+    this.updateVideoTimelineUI();
 
     const isFirst = this.currentStepIndex === 0;
     const isLast = this.currentStepIndex === this.currentSteps.length - 1;
@@ -656,16 +752,18 @@ export class BlackboardView {
     PluginManager.getInstance().notifyStepRender(step);
     this.updateInspectDrawer();
 
+    const accumulatedStep = this.getAccumulatedStep(this.currentStepIndex);
+
     // Primary: Rough.js organic chalk sketching animation
     if (this.renderEngine === 'rough') {
-      this.roughRenderer.animateStep(step, 450, this.viewport);
+      this.roughRenderer.animateStep(accumulatedStep, 450, this.viewport);
       return;
     }
 
     // Fallback 1: Skia GPU
     if (this.skiaRenderer.hasSurface()) {
       try {
-        this.skiaRenderer.animateStep(step, 450);
+        this.skiaRenderer.animateStep(accumulatedStep, 450);
         return;
       } catch (err) {
         console.warn('Skia animation failed, falling back to 2D:', err);
@@ -682,7 +780,7 @@ export class BlackboardView {
       return;
     }
 
-    const step = this.currentSteps[this.currentStepIndex];
+    const step = this.getAccumulatedStep(this.currentStepIndex);
 
     // Primary: Rough.js Chalkboard engine
     if (this.renderEngine === 'rough') {
@@ -753,7 +851,7 @@ export class BlackboardView {
     this.drawGrid();
 
     if (this.currentSteps.length > 0) {
-      const step = this.currentSteps[this.currentStepIndex];
+      const step = this.getAccumulatedStep(this.currentStepIndex);
       if (step && step.elements) {
       step.elements.forEach((el) => {
         if (!this.ctx) return;
@@ -876,57 +974,329 @@ export class BlackboardView {
     this.ctx.restore();
   }
 
+  // ── Video Stream Timeline & Playback Engine ───────────────────
+  public calculateVideoTimeline(): void {
+    if (this.currentSteps.length === 0) {
+      this.videoTotalDuration = 0;
+      this.sceneTimeRanges = [];
+      this.updateVideoTimelineUI();
+      return;
+    }
+
+    let runningTime = 0;
+    this.sceneTimeRanges = this.currentSteps.map((step) => {
+      const words = `${step.title} ${step.explanation}`.trim().split(/\s+/).length;
+      // Speech rate: ~2.2 words per second.
+      // Short test labels (<= 4 words) use 3.5s. Full sentences use word count / 2.2 (e.g. 10-18s)
+      const duration = words <= 4 ? 3.5 : Math.max(6, Math.ceil(words / 2.2));
+      const start = runningTime;
+      const end = runningTime + duration;
+      runningTime = end;
+      return { start, end, duration, step };
+    });
+
+    this.videoTotalDuration = runningTime;
+    if (this.videoScrubber) {
+      this.videoScrubber.min = '0';
+      this.videoScrubber.max = this.videoTotalDuration.toString();
+      this.videoScrubber.step = '0.1';
+    }
+    this.updateVideoTimelineUI();
+  }
+
+  public updateVideoTimelineUI(): void {
+    if (this.videoCurrentTimeEl) {
+      this.videoCurrentTimeEl.textContent = this.formatVideoTime(this.videoCurrentTime);
+    }
+    if (this.videoTotalTimeEl) {
+      this.videoTotalTimeEl.textContent = this.formatVideoTime(this.videoTotalDuration);
+    }
+    if (this.videoScrubber) {
+      this.videoScrubber.value = this.videoCurrentTime.toFixed(1);
+    }
+    if (this.videoProgressFill) {
+      const pct = this.videoTotalDuration > 0 ? (this.videoCurrentTime / this.videoTotalDuration) * 100 : 0;
+      this.videoProgressFill.style.width = `${pct}%`;
+    }
+    if (this.videoSceneIndicator) {
+      const total = this.currentSteps.length;
+      this.videoSceneIndicator.textContent = total > 0 ? `Scene ${this.currentStepIndex + 1} of ${total}` : 'Scene 0 of 0';
+    }
+  }
+
+  public formatVideoTime(seconds: number): string {
+    const s = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+
+  public toggleVideoPlayback(): void {
+    if (this.isVideoPlaying) {
+      this.pauseVideoPlayback();
+    } else {
+      this.startVideoPlayback();
+    }
+  }
+
+  public startVideoPlayback(): void {
+    if (this.currentSteps.length === 0) return;
+    if (this.videoCurrentTime >= this.videoTotalDuration) {
+      this.videoCurrentTime = 0;
+      this.currentStepIndex = 0;
+      this.renderCurrentStep();
+    }
+    this.isVideoPlaying = true;
+    this.updateVideoPlayPauseUI(true);
+    this.lastFrameTimestamp = performance.now();
+    this.startVideoClock();
+    this.syncSpeechToCurrentScene();
+  }
+
+  public pauseVideoPlayback(): void {
+    this.isVideoPlaying = false;
+    this.updateVideoPlayPauseUI(false);
+    this.stopVideoClock();
+    if (this.playTimer) {
+      clearTimeout(this.playTimer);
+      this.playTimer = null;
+    }
+    SpeechService.pause();
+  }
+
+  public restartVideo(): void {
+    this.videoCurrentTime = 0;
+    this.currentStepIndex = 0;
+    this.renderCurrentStep();
+    this.updateVideoTimelineUI();
+    this.startVideoPlayback();
+  }
+
+  private updateVideoPlayPauseUI(playing: boolean): void {
+    if (this.videoPlayLabel) {
+      this.videoPlayLabel.textContent = playing ? 'Pause' : 'Play';
+    }
+    if (this.videoPlayIcon) {
+      if (playing) {
+        this.videoPlayIcon.innerHTML = '<rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/>';
+      } else {
+        this.videoPlayIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>';
+      }
+    }
+    if (this.stepPlayBtn) {
+      this.stepPlayBtn.textContent = playing ? 'Pause' : 'Autoplay';
+    }
+    this.updateHudPlayIcon(playing);
+  }
+
+  private startVideoClock(): void {
+    this.stopVideoClock();
+    const tick = (now: number) => {
+      if (!this.isVideoPlaying) return;
+      const deltaSec = (now - this.lastFrameTimestamp) / 1000;
+      this.lastFrameTimestamp = now;
+
+      this.videoCurrentTime += deltaSec * this.playbackSpeed;
+
+      if (this.videoCurrentTime >= this.videoTotalDuration) {
+        this.videoCurrentTime = this.videoTotalDuration;
+        this.updateVideoTimelineUI();
+        this.pauseVideoPlayback();
+        return;
+      }
+
+      this.updateVideoTimelineUI();
+
+      // Check which scene corresponds to videoCurrentTime
+      const activeRangeIndex = this.sceneTimeRanges.findIndex(
+        (r) => this.videoCurrentTime >= r.start && this.videoCurrentTime < r.end
+      );
+
+      const targetIndex = activeRangeIndex >= 0 ? activeRangeIndex : (this.currentSteps.length - 1);
+      if (targetIndex !== this.currentStepIndex) {
+        this.currentStepIndex = targetIndex;
+        this.renderCurrentStep();
+        this.syncSpeechToCurrentScene();
+      }
+
+      this.videoAnimFrameId = requestAnimationFrame(tick);
+    };
+
+    this.videoAnimFrameId = requestAnimationFrame(tick);
+  }
+
+  private stopVideoClock(): void {
+    if (this.videoAnimFrameId !== null) {
+      cancelAnimationFrame(this.videoAnimFrameId);
+      this.videoAnimFrameId = null;
+    }
+  }
+
+  public seekToTime(time: number): void {
+    this.videoCurrentTime = Math.max(0, Math.min(this.videoTotalDuration, time));
+    this.updateVideoTimelineUI();
+
+    const activeRangeIndex = this.sceneTimeRanges.findIndex(
+      (r) => this.videoCurrentTime >= r.start && this.videoCurrentTime <= r.end
+    );
+    const targetIndex = activeRangeIndex >= 0 ? activeRangeIndex : (this.currentSteps.length - 1);
+    if (targetIndex !== this.currentStepIndex) {
+      this.currentStepIndex = targetIndex;
+    }
+    this.renderCurrentStep();
+    if (this.isVideoPlaying) {
+      this.syncSpeechToCurrentScene();
+    } else {
+      SpeechService.stop();
+      this.updateSubtitles();
+    }
+  }
+
+  public onScrubberSeek(e: Event): void {
+    const val = parseFloat((e.target as HTMLInputElement).value);
+    this.seekToTime(val);
+  }
+
+  public cyclePlaybackSpeed(): void {
+    const speeds = [1.0, 1.25, 1.5, 2.0];
+    const currentIndex = speeds.indexOf(this.playbackSpeed);
+    const nextIndex = (currentIndex + 1) % speeds.length;
+    this.playbackSpeed = speeds[nextIndex];
+    if (this.videoSpeedBtn) {
+      this.videoSpeedBtn.textContent = `${this.playbackSpeed}x`;
+    }
+    if (this.isVideoPlaying) {
+      this.syncSpeechToCurrentScene();
+    }
+  }
+
+  public toggleMute(): void {
+    this.isMuted = !this.isMuted;
+    if (this.videoMuteBtn) {
+      this.videoMuteBtn.textContent = this.isMuted ? 'Unmute' : 'Mute';
+      this.videoMuteBtn.classList.toggle('active', this.isMuted);
+    }
+    if (this.isMuted) {
+      SpeechService.stop();
+    } else if (this.isVideoPlaying) {
+      this.syncSpeechToCurrentScene();
+    }
+  }
+
+  private updateSubtitles(): void {
+    const step = this.currentSteps[this.currentStepIndex];
+    if (!step) {
+      if (this.videoSubtitles) this.videoSubtitles.classList.add('hidden');
+      return;
+    }
+    if (this.videoSubtitles) this.videoSubtitles.classList.remove('hidden');
+    if (this.videoSubtitlesText) {
+      this.videoSubtitlesText.textContent = step.explanation;
+    }
+  }
+
+  private syncSpeechToCurrentScene(): void {
+    const step = this.currentSteps[this.currentStepIndex];
+    if (!step) return;
+
+    this.updateSubtitles();
+
+    if (this.playTimer) {
+      clearTimeout(this.playTimer);
+      this.playTimer = null;
+    }
+
+    const currentRange = this.sceneTimeRanges[this.currentStepIndex];
+    const durationMs = ((currentRange?.duration || 3.5) * 1000) / this.playbackSpeed;
+
+    this.playTimer = setTimeout(() => {
+      if (!this.isVideoPlaying) return;
+      if (this.currentStepIndex < this.currentSteps.length - 1) {
+        this.nextStep();
+      } else {
+        this.pauseVideoPlayback();
+      }
+    }, durationMs);
+
+    if (this.isMuted) {
+      SpeechService.stop();
+      return;
+    }
+
+    const textToSpeak = `${step.title}. ${step.explanation}`;
+    SpeechService.speak(textToSpeak, {
+      rate: this.playbackSpeed,
+      onStart: () => {
+        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Speaking...';
+      },
+      onEnd: () => {
+        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
+        if (this.isVideoPlaying && this.playTimer) {
+          clearTimeout(this.playTimer);
+          this.playTimer = setTimeout(() => {
+            if (!this.isVideoPlaying) return;
+            if (this.currentStepIndex < this.currentSteps.length - 1) {
+              this.nextStep();
+            } else {
+              this.pauseVideoPlayback();
+            }
+          }, 800 / this.playbackSpeed);
+        }
+      },
+      onError: () => {
+        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
+      },
+    });
+  }
+
+  public playCurrentStepWithNarration(): void {
+    this.syncSpeechToCurrentScene();
+  }
+
   public nextStep(): void {
     if (this.currentStepIndex < this.currentSteps.length - 1) {
       this.currentStepIndex++;
+      const range = this.sceneTimeRanges[this.currentStepIndex];
+      if (range) {
+        this.videoCurrentTime = range.start;
+      }
       this.renderCurrentStep();
-      if (this.isPlaying) {
-        this.playCurrentStepWithNarration();
+      if (this.isVideoPlaying) {
+        this.syncSpeechToCurrentScene();
       }
     } else {
-      this.stopAutoplay();
+      this.pauseVideoPlayback();
     }
   }
 
   public prevStep(): void {
     if (this.currentStepIndex > 0) {
       this.currentStepIndex--;
+      const range = this.sceneTimeRanges[this.currentStepIndex];
+      if (range) {
+        this.videoCurrentTime = range.start;
+      }
       this.renderCurrentStep();
-      if (this.isPlaying) {
-        this.playCurrentStepWithNarration();
+      if (this.isVideoPlaying) {
+        this.syncSpeechToCurrentScene();
       }
     }
   }
 
   public toggleAutoplay(): void {
-    if (this.isPlaying) {
-      this.stopAutoplay();
-    } else {
-      if (this.currentStepIndex >= this.currentSteps.length - 1) {
-        this.currentStepIndex = 0;
-        this.renderCurrentStep();
-      }
-      this.startAutoplay();
-    }
+    this.toggleVideoPlayback();
   }
 
-  private startAutoplay(): void {
-    this.isPlaying = true;
-    if (this.stepPlayBtn) this.stepPlayBtn.textContent = 'Pause';
-    this.updateHudPlayIcon(true);
-    this.playCurrentStepWithNarration();
+  public startAutoplay(): void {
+    this.startVideoPlayback();
   }
 
-  private stopAutoplay(): void {
-    this.isPlaying = false;
-    if (this.playTimer) {
-      clearTimeout(this.playTimer);
-      this.playTimer = null;
-    }
-    SpeechService.stop();
-    if (this.stepPlayBtn) this.stepPlayBtn.textContent = 'Autoplay';
-    if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
-    this.updateHudPlayIcon(false);
+  public stopAutoplay(): void {
+    this.pauseVideoPlayback();
+  }
+
+  public narrateCurrentStep(): void {
+    this.toggleVideoPlayback();
   }
 
   private updateHudPlayIcon(isPlaying: boolean): void {
@@ -940,64 +1310,20 @@ export class BlackboardView {
     }
   }
 
-  private playCurrentStepWithNarration(): void {
-    if (!this.isPlaying || this.currentSteps.length === 0) return;
-    const step = this.currentSteps[this.currentStepIndex];
-    if (!step) return;
-
-    if (this.playTimer) {
-      clearTimeout(this.playTimer);
-      this.playTimer = null;
-    }
-
-    if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Speaking...';
-
-    // Set fallback safety timer (advances if speech completes or if TTS is unavailable/mocked)
-    this.playTimer = setTimeout(() => {
-      if (!this.isPlaying) return;
-      if (this.currentStepIndex < this.currentSteps.length - 1) {
-        this.currentStepIndex++;
-        this.renderCurrentStep();
-        this.playCurrentStepWithNarration();
-      } else {
-        this.stopAutoplay();
-      }
-    }, 3500);
-
-    const textToSpeak = `${step.title}. ${step.explanation}`;
-
-    SpeechService.speak(textToSpeak, {
-      rate: 1.05,
-      onStart: () => {
-        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Speaking...';
-      },
-      onEnd: () => {
-        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
-        if (!this.isPlaying) return;
-        if (this.playTimer) clearTimeout(this.playTimer);
-        this.playTimer = setTimeout(() => {
-          if (!this.isPlaying) return;
-          if (this.currentStepIndex < this.currentSteps.length - 1) {
-            this.currentStepIndex++;
-            this.renderCurrentStep();
-            this.playCurrentStepWithNarration();
-          } else {
-            this.stopAutoplay();
-          }
-        }, 850);
-      },
-      onError: () => {
-        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
-      },
-    });
+  public getPlaybackSpeed(): number {
+    return this.playbackSpeed;
   }
 
-  public narrateCurrentStep(): void {
-    if (this.isPlaying) {
-      this.stopAutoplay();
-    } else {
-      this.startAutoplay();
-    }
+  public getVideoCurrentTime(): number {
+    return this.videoCurrentTime;
+  }
+
+  public getVideoTotalDuration(): number {
+    return this.videoTotalDuration;
+  }
+
+  public isVideoPlayingActive(): boolean {
+    return this.isVideoPlaying;
   }
 
   public exportDiagram(format: 'mermaid' | 'excalidraw' | 'plantuml' | 'manim' | string): void {

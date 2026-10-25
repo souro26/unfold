@@ -177,31 +177,31 @@ export class AgentOrchestrator {
         progressionStages: [
           {
             stageNumber: 1,
-            title: 'The Curve & Secant Line',
-            objective: 'Show the initial curve and a secant line cutting through two separate points P and Q.',
+            title: 'The Circle & Point on Boundary',
+            objective: 'Draw the circle with center O, radius r, and select point of contact P.',
             narrationScript:
-              'To understand a tangent, we must begin with a secant line. Notice how this line intersects our curve at two distinct points, P and Q.',
+              'To understand what a tangent is, we start with a circle centered at point O with radius r, and mark a point P on its boundary.',
           },
           {
             stageNumber: 2,
-            title: 'The Limiting Process (Δx → 0)',
-            objective: 'Animate Q sliding down the curve toward P. Show the secant line rotating toward its limit.',
+            title: 'The Tangent Line (Touches at One Point)',
+            objective: 'Draw a straight line that touches the circle at one and only one exact point P.',
             narrationScript:
-              'Now, imagine point Q sliding along the curve toward point P. As the horizontal distance delta x approaches zero, the secant line tilts closer to its boundary position.',
+              'By definition, a tangent is a straight line that touches the circle at one and only one point. Notice line T: it touches point P without cutting inside the circle.',
           },
           {
             stageNumber: 3,
-            title: 'The Tangent Line Established',
-            objective: 'Point Q merges with P into a single point of contact. The line touches the curve without crossing it.',
+            title: 'Secant vs Tangent vs Exterior Line',
+            objective: 'Contrast the tangent with a secant line (cutting 2 points) and an exterior line (0 points).',
             narrationScript:
-              'At the exact moment Q reaches P, our secant becomes a true tangent line. It touches the curve at exactly one point, capturing its instantaneous slope.',
+              'Notice what makes a tangent special. A secant line cuts through at two points. An exterior line never touches at all. The tangent is the unique boundary line that touches at exactly point P.',
           },
           {
             stageNumber: 4,
-            title: 'Perpendicularity & Velocity Vector',
-            objective: 'Draw the 90° right-angle marker to the radius/normal, and the tangential velocity vector.',
+            title: 'Perpendicularity & Tangential Velocity',
+            objective: 'Demonstrate the 90° right angle to the radius and tangential velocity vector.',
             narrationScript:
-              'Here is the definitive takeaway: the tangent line forms a strict ninety-degree angle with the normal. In physics, if an object spinning in a circle is released, it flies off along this exact tangential velocity vector.',
+              'Here is the key rule: the tangent is always strictly perpendicular—at ninety degrees—to the radius at point P. In physics, if a spinning object is released, it flies off along this exact tangential velocity vector.',
           },
         ],
       };
@@ -297,75 +297,59 @@ export class AgentOrchestrator {
     const px = cx;
     const py = cy - r; // Point of tangency at top apex (440, 130)
 
-    // Step 1: Circle + Center + Secant Line through P and Q
-    const qx1 = cx + 85;
-    const qy1 = cy - Math.sqrt(r * r - 85 * 85); // Point Q on circle (approx 440+85, 250-84 = 166)
-
+    // Scene 1: Circle with Center O, Radius r, and Point of Contact P on boundary
     const step1Elements: DrawingElement[] = [
-      // Coordinate grid lines
-      { id: 'axis_x', type: 'line', color: 'rgba(255,255,255,0.15)', strokeWidth: 1, start: { x: 120, y: cy }, end: { x: 760, y: cy } },
-      { id: 'axis_y', type: 'line', color: 'rgba(255,255,255,0.15)', strokeWidth: 1, start: { x: cx, y: 50 }, end: { x: cx, y: 450 } },
+      { id: 'axis_x', type: 'line', color: 'rgba(255,255,255,0.12)', strokeWidth: 1, start: { x: 120, y: cy }, end: { x: 760, y: cy } },
+      { id: 'axis_y', type: 'line', color: 'rgba(255,255,255,0.12)', strokeWidth: 1, start: { x: cx, y: 50 }, end: { x: cx, y: 450 } },
       // Circle
       { id: 'circle_main', type: 'circle', color: palette.primary, strokeWidth: 3, start: { x: cx, y: cy }, radius: r },
-      { id: 'center_dot', type: 'circle', color: palette.text, strokeWidth: 2, start: { x: cx, y: cy }, radius: 4, text: 'O (Center)' },
-      // Point P (Apex)
-      { id: 'pt_p', type: 'circle', color: palette.secondary, strokeWidth: 3, start: { x: px, y: py }, radius: 6, text: 'P (x₀, y₀)' },
-      // Point Q (Secant point)
-      { id: 'pt_q', type: 'circle', color: palette.auxiliary, strokeWidth: 3, start: { x: qx1, y: qy1 }, radius: 6, text: 'Q (x₀+Δx, y₀+Δy)' },
-      // Secant Line cutting through P and Q
-      { id: 'secant_line', type: 'line', color: palette.auxiliary, strokeWidth: 2.5, start: { x: px - 80, y: py - 24 }, end: { x: qx1 + 100, y: qy1 + 30 }, text: 'Secant Line' },
-      // Info card
-      { id: 'badge_1', type: 'rect', color: 'rgba(255, 184, 108, 0.2)', fill: 'rgba(255, 184, 108, 0.08)', strokeWidth: 1.5, start: { x: 120, y: 70 }, width: 220, height: 60, text: 'Secant cuts at 2 points' },
-    ];
-
-    // Step 2: Q sliding toward P (Δx -> 0)
-    const qx2 = cx + 35;
-    const qy2 = cy - Math.sqrt(r * r - 35 * 35);
-    const step2Elements: DrawingElement[] = [
-      { id: 'axis_x', type: 'line', color: 'rgba(255,255,255,0.15)', strokeWidth: 1, start: { x: 120, y: cy }, end: { x: 760, y: cy } },
-      { id: 'axis_y', type: 'line', color: 'rgba(255,255,255,0.15)', strokeWidth: 1, start: { x: cx, y: 50 }, end: { x: cx, y: 450 } },
-      { id: 'circle_main', type: 'circle', color: palette.primary, strokeWidth: 3, start: { x: cx, y: cy }, radius: r },
-      { id: 'center_dot', type: 'circle', color: palette.text, strokeWidth: 2, start: { x: cx, y: cy }, radius: 4, text: 'O' },
-      { id: 'pt_p', type: 'circle', color: palette.secondary, strokeWidth: 3, start: { x: px, y: py }, radius: 6, text: 'P' },
-      { id: 'pt_q2', type: 'circle', color: palette.auxiliary, strokeWidth: 3, start: { x: qx2, y: qy2 }, radius: 6, text: 'Q → P' },
-      // Arrow showing motion Q -> P
-      { id: 'motion_arrow', type: 'arrow', color: palette.highlight, strokeWidth: 2, start: { x: qx1, y: qy1 - 15 }, end: { x: qx2 + 10, y: qy2 - 10 } },
-      // Tilting Secant line
-      { id: 'secant_line_2', type: 'line', color: palette.auxiliary, strokeWidth: 2.5, start: { x: px - 120, y: py - 12 }, end: { x: qx2 + 140, y: qy2 + 14 }, text: 'Tilting towards Tangent' },
-      { id: 'badge_2', type: 'rect', color: 'rgba(80, 250, 123, 0.2)', fill: 'rgba(80, 250, 123, 0.08)', strokeWidth: 1.5, start: { x: 120, y: 70 }, width: 230, height: 60, text: 'Limit: Δx → 0' },
-    ];
-
-    // Step 3: True Tangent Line at P
-    const step3Elements: DrawingElement[] = [
-      { id: 'axis_x', type: 'line', color: 'rgba(255,255,255,0.15)', strokeWidth: 1, start: { x: 120, y: cy }, end: { x: 760, y: cy } },
-      { id: 'axis_y', type: 'line', color: 'rgba(255,255,255,0.15)', strokeWidth: 1, start: { x: cx, y: 50 }, end: { x: cx, y: 450 } },
-      { id: 'circle_main', type: 'circle', color: palette.primary, strokeWidth: 3, start: { x: cx, y: cy }, radius: r },
-      { id: 'center_dot', type: 'circle', color: palette.text, strokeWidth: 2, start: { x: cx, y: cy }, radius: 4, text: 'O' },
+      { id: 'center_dot', type: 'circle', color: palette.text, strokeWidth: 2, start: { x: cx, y: cy }, radius: 4, text: 'Center O' },
       // Radius line O -> P
       { id: 'radius_line', type: 'line', color: palette.auxiliary, strokeWidth: 2.5, start: { x: cx, y: cy }, end: { x: px, y: py }, text: 'Radius r' },
-      // Tangent point P
+      // Point P on circumference
       { id: 'pt_p', type: 'circle', color: palette.secondary, strokeWidth: 4, start: { x: px, y: py }, radius: 7, text: 'Point of Contact P' },
-      // True horizontal Tangent Line
-      { id: 'tangent_line', type: 'line', color: palette.accent, strokeWidth: 3.5, start: { x: px - 240, y: py }, end: { x: px + 240, y: py }, text: 'Tangent Line T(x)' },
-      // 90 degree marker
-      { id: 'right_angle', type: 'path', color: palette.secondary, strokeWidth: 2, d: `M ${px - 14} ${py} L ${px - 14} ${py + 14} L ${px} ${py + 14}` },
-      { id: 'badge_3', type: 'rect', color: 'rgba(189, 147, 249, 0.25)', fill: 'rgba(189, 147, 249, 0.1)', strokeWidth: 1.5, start: { x: 100, y: 70 }, width: 250, height: 60, text: 'Touches at exactly ONE point' },
+      // Title badge
+      { id: 'badge_1', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 100, y: 70 }, width: 250, height: 60, text: 'Circle with Center O and Radius r' },
     ];
 
-    // Step 4: Perpendicularity & Physical Velocity Vector
+    // Scene 2: The Tangent Line (Touches at One and Only One Point)
+    const step2Elements: DrawingElement[] = [
+      ...step1Elements,
+      // Tangent line touching apex P (horizontal line through P)
+      { id: 'tangent_line', type: 'line', color: palette.accent, strokeWidth: 3.5, start: { x: px - 250, y: py }, end: { x: px + 250, y: py }, text: 'Tangent Line T' },
+      // Highlight contact point P
+      { id: 'pt_p_active', type: 'circle', color: palette.secondary, strokeWidth: 4, start: { x: px, y: py }, radius: 8 },
+      // Badge: Definition of Tangent
+      { id: 'badge_2', type: 'rect', color: palette.accent, fill: 'rgba(189, 147, 249, 0.12)', strokeWidth: 2, start: { x: 520, y: 70 }, width: 280, height: 65, text: 'Touches at ONE and ONLY ONE point' },
+    ];
+
+    // Scene 3: Secant vs Tangent vs Exterior Line
+    const step3Elements: DrawingElement[] = [
+      ...step2Elements,
+      // Secant line cutting through two points
+      { id: 'secant_line', type: 'line', color: palette.auxiliary, strokeWidth: 2.5, start: { x: px - 180, y: cy - 40 }, end: { x: px + 180, y: cy - 40 }, text: 'Secant Line: cuts at 2 points' },
+      { id: 'sec_pt1', type: 'circle', color: palette.auxiliary, strokeWidth: 2, start: { x: px - 113, y: cy - 40 }, radius: 4 },
+      { id: 'sec_pt2', type: 'circle', color: palette.auxiliary, strokeWidth: 2, start: { x: px + 113, y: cy - 40 }, radius: 4 },
+      // Exterior line that misses completely
+      { id: 'ext_line', type: 'line', color: 'rgba(255,255,255,0.3)', strokeWidth: 1.5, start: { x: px - 200, y: py - 40 }, end: { x: px + 200, y: py - 40 }, text: 'Exterior Line: 0 points' },
+    ];
+
+    // Scene 4: Perpendicularity (90° Angle) & Tangential Velocity Vector
     const step4Elements: DrawingElement[] = [
-      { id: 'axis_x', type: 'line', color: 'rgba(255,255,255,0.15)', strokeWidth: 1, start: { x: 120, y: cy }, end: { x: 760, y: cy } },
-      { id: 'axis_y', type: 'line', color: 'rgba(255,255,255,0.15)', strokeWidth: 1, start: { x: cx, y: 50 }, end: { x: cx, y: 450 } },
+      { id: 'axis_x', type: 'line', color: 'rgba(255,255,255,0.12)', strokeWidth: 1, start: { x: 120, y: cy }, end: { x: 760, y: cy } },
+      { id: 'axis_y', type: 'line', color: 'rgba(255,255,255,0.12)', strokeWidth: 1, start: { x: cx, y: 50 }, end: { x: cx, y: 450 } },
       { id: 'circle_main', type: 'circle', color: palette.primary, strokeWidth: 3, start: { x: cx, y: cy }, radius: r },
+      { id: 'center_dot', type: 'circle', color: palette.text, strokeWidth: 2, start: { x: cx, y: cy }, radius: 4, text: 'Center O' },
       { id: 'radius_line', type: 'line', color: palette.auxiliary, strokeWidth: 2.5, start: { x: cx, y: cy }, end: { x: px, y: py }, text: 'Radius ⊥ Tangent' },
-      { id: 'tangent_line', type: 'line', color: palette.accent, strokeWidth: 3, start: { x: px - 220, y: py }, end: { x: px + 220, y: py } },
+      { id: 'tangent_line', type: 'line', color: palette.accent, strokeWidth: 3.5, start: { x: px - 240, y: py }, end: { x: px + 240, y: py }, text: 'Tangent Line T' },
+      { id: 'pt_p', type: 'circle', color: palette.secondary, strokeWidth: 4, start: { x: px, y: py }, radius: 7, text: 'P' },
+      // 90 degree perpendicular marker
       { id: 'right_angle', type: 'path', color: palette.secondary, strokeWidth: 2, d: `M ${px - 14} ${py} L ${px - 14} ${py + 14} L ${px} ${py + 14}` },
       // Tangential velocity vector
-      { id: 'vel_vector', type: 'arrow', color: palette.highlight, strokeWidth: 4, start: { x: px, y: py }, end: { x: px + 180, y: py }, text: 'Velocity v⃗' },
-      { id: 'pt_p', type: 'circle', color: palette.secondary, strokeWidth: 4, start: { x: px, y: py }, radius: 7 },
-      // Definitive Formula Card
-      { id: 'formula_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.1)', strokeWidth: 2, start: { x: 530, y: 350 }, width: 260, height: 80, text: 'Slope m = dy/dx = f\'(x₀)' },
-      { id: 'text_rule', type: 'text', color: palette.text, strokeWidth: 2, start: { x: 540, y: 410 }, text: 'Angle: θ = 90° to Normal' },
+      { id: 'vel_vector', type: 'arrow', color: palette.highlight, strokeWidth: 4, start: { x: px, y: py }, end: { x: px + 190, y: py }, text: 'Tangential Velocity v⃗' },
+      // Formula card
+      { id: 'formula_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.1)', strokeWidth: 2, start: { x: 500, y: 340 }, width: 290, height: 80, text: 'Angle: θ = 90° to Radius' },
+      { id: 'text_rule', type: 'text', color: palette.text, strokeWidth: 2, start: { x: 515, y: 400 }, text: 'Instantaneous Slope: m = dy/dx' },
     ];
 
     return {

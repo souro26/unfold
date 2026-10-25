@@ -195,10 +195,10 @@ unfold/
 - [x] Collaborative mode (`CollaborationService` for shared overlay synchronization, peer awareness, live strokes)
 - [x] Advanced gesture recognition (pinch-zoom, rotate, pan, reset)
 - [x] Local LLM via llama.cpp sidecar (`nemotron-3-4b-int4` for RTX 4060 8GB)
-- [x] Robust local chat persistence: auto-titling, in-memory fallback, and JSON export/import
-- [x] Hardware stylus pen tilt and pressure calibration curves (soft, firm, calligraphic profiles, Catmull-Rom splines)
-- [x] Packaging & Release: Generated Windows NSIS setup (9.10 MiB) and MSI (11.96 MiB) installers (`npx tauri build`)
-- [x] Comprehensive QA and E2E test suite (69 Vitest tests + 10 Rust unit/integration tests)
+- [x] Continuous Whiteboard Video Player (`BlackboardView` with interactive video timeline scrubber, scene seeking, speed cycling `1x-2x`, mute toggle, floating synchronized subtitles, and non-destructive accumulated chalkboard rendering)
+- [x] Speech narration lifecycle synchronized with video timeline clock, eliminating premature 3.5s speech cutoffs and section skips
+- [x] Intuitive pedagogy restructuring for geometry (e.g., Tangent: Circle & Point P foundation -> Tangent Line -> Contrast with Secant & Exterior -> Perpendicularity & Velocity)
+- [x] Comprehensive QA and E2E test suite (78 Vitest tests + 10 Rust unit/integration tests)
 
 ### 📋 Next Steps & Distribution Roadmap (v0.2.0+)
 - [ ] Bundling llama-server executable sidecar into Tauri distribution bundle
