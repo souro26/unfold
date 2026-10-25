@@ -164,6 +164,7 @@ fn main() {
             commands::list_monitors,
             commands::get_screen_capture_permission,
             commands::set_screen_capture_permission,
+            commands::synthesize_speech,
         ])
         .on_window_event(|window, event| {
             tracing::debug!("Window event: label={:?}, event={:?}", window.label(), event);

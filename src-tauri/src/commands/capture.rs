@@ -31,9 +31,14 @@ pub async fn capture_screen_with_vision(
     request: Option<ScreenCaptureRequest>,
     vision_request: VisionRequest,
 ) -> Result<VisionResponse, String> {
-    let (permission, api_key) = {
+    let (permission, api_key, provider, vision_model) = {
         let settings = state.settings.read().unwrap();
-        (settings.screen_capture_permission, settings.api_key.clone())
+        (
+            settings.screen_capture_permission,
+            settings.api_key.clone(),
+            settings.llm_provider.clone(),
+            settings.vision_model.clone().unwrap_or_else(|| "nvidia/nemotron-3.5-super-vl-120b-a12b".to_string()),
+        )
     };
     if !permission {
         return Err("Screen capture permission not granted. Please enable it in settings.".to_string());
@@ -50,6 +55,12 @@ pub async fn capture_screen_with_vision(
 
     if vision_req.api_key.is_none() {
         vision_req.api_key = api_key;
+    }
+    if vision_req.provider.is_empty() || (vision_req.provider == "gemini" && provider == "nvidia") {
+        vision_req.provider = provider;
+    }
+    if vision_req.model.is_empty() || (vision_req.model.contains("gemini") && !vision_model.is_empty()) {
+        vision_req.model = vision_model;
     }
 
     call_vision_api(vision_req).await

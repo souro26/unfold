@@ -30,6 +30,10 @@ pub struct Settings {
     #[serde(default)]
     pub vision_model: Option<String>,
     #[serde(default)]
+    pub tts_provider: Option<String>,
+    #[serde(default)]
+    pub tts_model: Option<String>,
+    #[serde(default)]
     pub speech_rate: Option<f32>,
     #[serde(default)]
     pub speech_voice: Option<String>,
@@ -46,7 +50,9 @@ impl Default for Settings {
             temperature: Some(0.7),
             max_tokens: Some(4096),
             system_prompt: None,
-            vision_model: Some("meta/llama-3.2-11b-vision-instruct".into()),
+            vision_model: Some("nvidia/nemotron-3.5-super-vl-120b-a12b".into()),
+            tts_provider: Some("nvidia".into()),
+            tts_model: Some("nvidia/magpie-tts-zeroshot".into()),
             speech_rate: Some(1.0),
             speech_voice: None,
         }
@@ -144,6 +150,8 @@ mod tests {
             max_tokens: Some(4096),
             system_prompt: None,
             vision_model: None,
+            tts_provider: None,
+            tts_model: None,
             speech_rate: None,
             speech_voice: None,
         };

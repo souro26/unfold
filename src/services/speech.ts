@@ -1,3 +1,6 @@
+import { invoke } from '@tauri-apps/api/core';
+import { getSettings } from './ipc';
+
 export interface SpeechOptions {
   rate?: number;
   pitch?: number;
@@ -18,6 +21,7 @@ export class SpeechService {
   private static synth: SpeechSynthesis | null = typeof window !== 'undefined' ? window.speechSynthesis : null;
   private static selectedVoice: SpeechSynthesisVoice | null = null;
   private static selectedLang: string = 'en-US';
+  private static currentAudio: HTMLAudioElement | null = null;
 
   public static readonly SUPPORTED_LANGUAGES: SpeechLanguage[] = [
     { code: 'en-US', name: 'English (US)', nativeName: 'English' },
@@ -108,13 +112,47 @@ export class SpeechService {
       .trim();
   }
 
-  static speak(text: string, options: SpeechOptions = {}): void {
-    if (!this.synth) return;
-    this.stop();
-
+  static async speak(text: string, options: SpeechOptions = {}): Promise<void> {
     const cleanText = this.parseSSML(text);
     if (!cleanText) return;
 
+    this.stop();
+
+    // 1. Try NVIDIA Neural TTS if enabled & configured
+    try {
+      const settings = await getSettings();
+      if (settings.tts_provider !== 'system' && settings.api_key && settings.llm_provider === 'nvidia') {
+        const audioData = await invoke<string>('synthesize_speech', {
+          text: cleanText,
+          voice: options.voiceName || 'alloy',
+        });
+        if (audioData) {
+          const audio = new Audio(audioData);
+          this.currentAudio = audio;
+          if (options.onStart) options.onStart();
+          audio.onended = () => {
+            this.currentAudio = null;
+            if (options.onEnd) options.onEnd();
+          };
+          audio.onerror = (e) => {
+            console.warn('Audio playback error, falling back to Web Speech:', e);
+            this.currentAudio = null;
+            this.speakWithWebSpeech(cleanText, options);
+          };
+          await audio.play();
+          return;
+        }
+      }
+    } catch (err) {
+      // Gracefully fall back to local browser speech synthesis
+    }
+
+    // 2. Fallback to browser Web Speech API
+    this.speakWithWebSpeech(cleanText, options);
+  }
+
+  public static speakWithWebSpeech(cleanText: string, options: SpeechOptions = {}): void {
+    if (!this.synth) return;
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = options.rate ?? 1.0;
     utterance.pitch = options.pitch ?? 1.0;
@@ -128,7 +166,6 @@ export class SpeechService {
       const v = this.getVoices().find((voice) => voice.name === options.voiceName);
       if (v) utterance.voice = v;
     } else {
-      // Find suitable voice for targetLang
       const prefix = targetLang.split('-')[0].toLowerCase();
       const match = this.getVoices().find((v) => v.lang.toLowerCase().startsWith(prefix));
       if (match) utterance.voice = match;
@@ -142,12 +179,18 @@ export class SpeechService {
   }
 
   static stop(): void {
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio = null;
+    }
     if (this.synth) {
       this.synth.cancel();
     }
   }
 
   static isSpeaking(): boolean {
-    return !!(this.synth && this.synth.speaking);
+    const isAudioPlaying = !!(this.currentAudio && !this.currentAudio.paused);
+    const isSynthSpeaking = !!(this.synth && this.synth.speaking);
+    return isAudioPlaying || isSynthSpeaking;
   }
 }

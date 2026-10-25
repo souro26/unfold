@@ -54,8 +54,25 @@ export class SettingsModalComponent {
             </select>
           </div>
           <div class="form-group">
-            <label for="modelInput">Model Name</label>
+            <label for="modelInput">Teaching / Chat Model (The Brain)</label>
             <input type="text" id="modelInput" class="setting-input" value="${escapeHtml(settings.model || 'meta/llama-3.3-70b-instruct')}" placeholder="e.g. meta/llama-3.3-70b-instruct" />
+            <span class="setting-hint" style="font-size:11px;color:var(--text-muted);margin-top:2px;display:block;">
+              NVIDIA options: <code>meta/llama-3.3-70b-instruct</code>, <code>nvidia/nemotron-3.5-bolt-e4b</code>
+            </span>
+          </div>
+          <div class="form-group">
+            <label for="visionModelInput">Screen Vision Model (The Eyes)</label>
+            <input type="text" id="visionModelInput" class="setting-input" value="${escapeHtml(settings.vision_model || 'nvidia/nemotron-3.5-super-vl-120b-a12b')}" placeholder="e.g. nvidia/nemotron-3.5-super-vl-120b-a12b" />
+            <span class="setting-hint" style="font-size:11px;color:var(--text-muted);margin-top:2px;display:block;">
+              Used for Screen Teach & UI reasoning: <code>nvidia/nemotron-3.5-super-vl-120b-a12b</code>, <code>nvidia/nemotron-3.5-parse</code>
+            </span>
+          </div>
+          <div class="form-group">
+            <label for="ttsSelect">Voice Narration Engine (The Voice)</label>
+            <select id="ttsSelect" class="setting-select">
+              <option value="nvidia" ${settings.tts_provider !== 'system' ? 'selected' : ''}>NVIDIA Neural TTS (nvidia/magpie-tts-zeroshot - Natural)</option>
+              <option value="system" ${settings.tts_provider === 'system' ? 'selected' : ''}>Local System Speech (Windows Speech Synthesis)</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="apiKeyInput" id="apiKeyLabel">API Key</label>
@@ -75,16 +92,24 @@ export class SettingsModalComponent {
 
     const providerSelect = overlay.querySelector('#providerSelect') as HTMLSelectElement;
     const modelInput = overlay.querySelector('#modelInput') as HTMLInputElement;
+    const visionModelInput = overlay.querySelector('#visionModelInput') as HTMLInputElement;
+    const ttsSelect = overlay.querySelector('#ttsSelect') as HTMLSelectElement;
     const apiKeyHint = overlay.querySelector('#apiKeyHint') as HTMLElement;
     const apiKeyInput = overlay.querySelector('#apiKeyInput') as HTMLInputElement;
 
     const updateProviderHints = () => {
       const val = providerSelect.value;
       if (val === 'nvidia') {
-        apiKeyHint.innerHTML = 'Free open source models! Get key at <a href="https://build.nvidia.com" target="_blank" style="color:var(--accent-teal, #00d4aa);text-decoration:underline;">build.nvidia.com</a>';
+        apiKeyHint.innerHTML = 'One free API key powers Brain, Vision, and Voice! Get key at <a href="https://build.nvidia.com" target="_blank" style="color:var(--accent-teal, #00d4aa);text-decoration:underline;">build.nvidia.com</a>';
         apiKeyInput.placeholder = 'nvapi-...';
         if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('nemotron') || modelInput.value === 'llama3') {
           modelInput.value = 'meta/llama-3.3-70b-instruct';
+        }
+        if (!visionModelInput.value || visionModelInput.value.includes('gemini')) {
+          visionModelInput.value = 'nvidia/nemotron-3.5-super-vl-120b-a12b';
+        }
+        if (ttsSelect.value === 'system') {
+          ttsSelect.value = 'nvidia';
         }
       } else if (val === 'llama_cpp') {
         apiKeyHint.textContent = 'Optional for local models (defaults to http://localhost:8080/v1)';
@@ -131,11 +156,16 @@ export class SettingsModalComponent {
     if (!this.modalEl) return;
     const providerSelect = this.modalEl.querySelector('#providerSelect') as HTMLSelectElement;
     const modelInput = this.modalEl.querySelector('#modelInput') as HTMLInputElement;
+    const visionModelInput = this.modalEl.querySelector('#visionModelInput') as HTMLInputElement;
+    const ttsSelect = this.modalEl.querySelector('#ttsSelect') as HTMLSelectElement;
     const apiKeyInput = this.modalEl.querySelector('#apiKeyInput') as HTMLInputElement;
 
     const newSettings: Settings = {
-      llm_provider: (providerSelect.value as LLMProvider) || 'gemini',
-      model: modelInput.value.trim() || 'gemini-1.5-flash',
+      llm_provider: (providerSelect.value as LLMProvider) || 'nvidia',
+      model: modelInput.value.trim() || 'meta/llama-3.3-70b-instruct',
+      vision_model: visionModelInput ? visionModelInput.value.trim() || 'nvidia/nemotron-3.5-super-vl-120b-a12b' : undefined,
+      tts_provider: ttsSelect ? (ttsSelect.value as 'nvidia' | 'system') : 'nvidia',
+      tts_model: 'nvidia/magpie-tts-zeroshot',
       api_key: apiKeyInput.value.trim() || null,
       temperature: 0.7,
       max_tokens: 4096,

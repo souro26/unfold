@@ -395,6 +395,52 @@ async fn call_llama_cpp(base_url: &str, model: String, prompt: String) -> Result
     Ok(content)
 }
 
+#[command]
+pub async fn synthesize_speech(
+    state: State<'_, AppState>,
+    text: String,
+    voice: Option<String>,
+) -> Result<String, String> {
+    use base64::Engine;
+
+    let settings = state
+        .settings
+        .read()
+        .map_err(|e| format!("Failed to read settings: {}", e))?
+        .clone();
+
+    let api_key = settings.api_key.ok_or_else(|| "No API key configured for speech synthesis".to_string())?;
+    let tts_model = settings
+        .tts_model
+        .unwrap_or_else(|| "nvidia/magpie-tts-zeroshot".to_string());
+
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!({
+        "model": tts_model,
+        "input": text,
+        "voice": voice.unwrap_or_else(|| "alloy".to_string()),
+        "response_format": "mp3"
+    });
+
+    let resp = client
+        .post("https://integrate.api.nvidia.com/v1/audio/speech")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("TTS network error: {}", e))?;
+
+    if !resp.status().is_success() {
+        let err_text = resp.text().await.unwrap_or_default();
+        return Err(format!("NVIDIA TTS error: {}", err_text));
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| format!("Failed to read TTS audio: {}", e))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:audio/mp3;base64,{}", b64))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
