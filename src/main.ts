@@ -274,6 +274,14 @@ export class App {
         });
       });
 
+      // If blackboard view is open, generate interactive blackboard steps from the AI response!
+      if (this.blackboardView.isOpen()) {
+        const steps = this.parseResponseToBlackboardSteps(response, text);
+        if (steps.length > 0) {
+          this.blackboardView.open(steps);
+        }
+      }
+
       addMessageToConversation(this.activeConversationId!, assistantMsg);
       this.conversations = loadConversations();
       this.sidebar.renderConversations(this.conversations, this.activeConversationId);
@@ -325,29 +333,112 @@ export class App {
 
   public enterBlackboard(): void {
     this.homeView.hide();
+    this.blackboardView.open([]);
     this.composer.show();
-    this.composer.setPlaceholder("Ask anything about this blackboard diagram…");
-    const sampleSteps: BlackboardStep[] = [
+    this.agentPanel.open();
+    this.composer.setPlaceholder("Ask what you want to learn on the blackboard…");
+    this.composer.focus();
+  }
+
+  private parseResponseToBlackboardSteps(response: string, userPrompt: string): BlackboardStep[] {
+    // 1. Try parsing JSON block if present
+    const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1].trim());
+        const list = Array.isArray(parsed) ? parsed : (parsed.steps || []);
+        if (list.length > 0 && list[0].title) {
+          return list.map((s: any, idx: number) => ({
+            step: s.step || idx + 1,
+            title: s.title || `Step ${idx + 1}`,
+            explanation: s.explanation || s.description || '',
+            elements: s.elements || [
+              { id: `el_${idx}_1`, type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 140, y: 160 }, width: 220, height: 100 },
+              { id: `el_${idx}_2`, type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 360, y: 210 }, end: { x: 500, y: 210 } },
+              { id: `el_${idx}_3`, type: 'rect', color: '#7928ca', strokeWidth: 2, start: { x: 500, y: 160 }, width: 220, height: 100 },
+            ],
+          }));
+        }
+      } catch {}
+    }
+
+    // 2. Try parsing markdown step headings (e.g. ### Step 1: ..., ## 1. ..., **Step 1:**)
+    const stepRegex = /(?:^|\n)(?:###?\s*(?:Step\s*(\d+)[:.]?|(\d+)[\.:])\s*|\*\*(?:Step\s*(\d+)[:.]?|(\d+)[\.:])\s*)([^\n]+)/gi;
+    const matches: { index: number; title: string; stepNum: number }[] = [];
+    let m;
+    while ((m = stepRegex.exec(response)) !== null) {
+      const stepNum = parseInt(m[1] || m[2] || m[3] || m[4] || `${matches.length + 1}`, 10);
+      const title = m[5].replace(/\*\*/g, '').trim();
+      matches.push({ index: m.index, title, stepNum });
+    }
+
+    if (matches.length >= 2) {
+      const parsedSteps: BlackboardStep[] = [];
+      for (let i = 0; i < matches.length; i++) {
+        const current = matches[i];
+        const nextIndex = i < matches.length - 1 ? matches[i + 1].index : response.length;
+        const bodyText = response.substring(current.index, nextIndex)
+          .replace(/^[^\n]+\n/, '')
+          .replace(/[#*`_]/g, '')
+          .trim();
+        const firstSentence = bodyText.split('\n')[0] || bodyText;
+
+        parsedSteps.push({
+          step: i + 1,
+          title: current.title || `Step ${i + 1}`,
+          explanation: firstSentence.slice(0, 200),
+          elements: [
+            { id: `st_${i}_box1`, type: 'rect', color: i % 2 === 0 ? '#00d4aa' : '#7928ca', strokeWidth: 2, start: { x: 120 + i * 40, y: 160 }, width: 200, height: 100 },
+            { id: `st_${i}_line`, type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 320 + i * 40, y: 210 }, end: { x: 460 + i * 40, y: 210 } },
+            { id: `st_${i}_box2`, type: 'rect', color: '#ffb86c', strokeWidth: 2, start: { x: 460 + i * 40, y: 160 }, width: 180, height: 100 },
+          ],
+        });
+      }
+      return parsedSteps;
+    }
+
+    // 3. Fallback: Parse paragraphs into 3 clean progressive steps
+    const cleanParagraphs = response
+      .split('\n\n')
+      .map(p => p.replace(/[#*`_]/g, '').trim())
+      .filter(p => p.length > 25);
+
+    const step1Text = cleanParagraphs[0] || response.slice(0, 180);
+    const step2Text = cleanParagraphs[1] || response.slice(180, 360) || step1Text;
+    const step3Text = cleanParagraphs[2] || 'Key takeaway: concept mastered with step-by-step breakdown.';
+
+    return [
       {
         step: 1,
-        title: 'Introduction & Core Concept',
-        explanation: 'Every distributed system begins with isolated nodes communicating over a network.',
+        title: `Core Concept: ${userPrompt.slice(0, 35)}`,
+        explanation: step1Text.slice(0, 220),
         elements: [
-          { id: '1', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 100, y: 150 }, width: 140, height: 80 },
-          { id: '2', type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 240, y: 190 }, end: { x: 380, y: 190 } },
-          { id: '3', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 380, y: 150 }, width: 140, height: 80 },
+          { id: 'bb_1_rect', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 140, y: 160 }, width: 220, height: 110 },
+          { id: 'bb_1_arrow', type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 360, y: 215 }, end: { x: 500, y: 215 } },
+          { id: 'bb_1_box2', type: 'rect', color: '#7928ca', strokeWidth: 2, start: { x: 500, y: 160 }, width: 220, height: 110 },
         ],
       },
       {
         step: 2,
-        title: 'Consensus & Message Flow',
-        explanation: 'Raft consensus guarantees leader election and replicated state machines across clusters.',
+        title: 'Mechanism & Deep Dive',
+        explanation: step2Text.slice(0, 220),
         elements: [
-          { id: '4', type: 'pen', color: '#ffb86c', strokeWidth: 3, points: [{ x: 100, y: 150 }, { x: 250, y: 80 }, { x: 380, y: 150 }] },
+          { id: 'bb_2_line1', type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 250, y: 160 }, end: { x: 430, y: 100 } },
+          { id: 'bb_2_line2', type: 'line', color: '#ffb86c', strokeWidth: 2, start: { x: 430, y: 100 }, end: { x: 610, y: 160 } },
+          { id: 'bb_2_rect', type: 'rect', color: '#ffb86c', strokeWidth: 2, start: { x: 330, y: 70 }, width: 200, height: 70 },
+          { id: 'bb_2_base', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 200, y: 240 }, width: 460, height: 90 },
+        ],
+      },
+      {
+        step: 3,
+        title: 'Definitive Takeaway Card',
+        explanation: step3Text.slice(0, 220),
+        elements: [
+          { id: 'bb_3_card', type: 'rect', color: '#00f0ff', strokeWidth: 3, start: { x: 220, y: 140 }, width: 440, height: 160 },
+          { id: 'bb_3_accent', type: 'line', color: '#ffb86c', strokeWidth: 3, start: { x: 220, y: 180 }, end: { x: 660, y: 180 } },
         ],
       },
     ];
-    this.blackboardView.open(sampleSteps);
   }
 
   public async toggleClickThrough(): Promise<void> {

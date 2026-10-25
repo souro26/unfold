@@ -336,6 +336,15 @@ export class BlackboardView {
           const step = this.currentSteps[this.currentStepIndex];
           if (!step.elements) step.elements = [];
           step.elements.push(newElement);
+        } else {
+          this.currentSteps = [{
+            step: 1,
+            title: 'Blackboard Sketch',
+            explanation: 'Freehand drawings and notes on the blackboard canvas.',
+            elements: [newElement],
+          }];
+          this.currentStepIndex = 0;
+          this.renderCurrentStep();
         }
       }
 
@@ -486,7 +495,18 @@ export class BlackboardView {
   }
 
   public renderCurrentStep(): void {
-    if (this.currentSteps.length === 0) return;
+    if (this.currentSteps.length === 0) {
+      if (this.titleEl) this.titleEl.textContent = 'Blackboard';
+      if (this.descEl) this.descEl.textContent = 'Ask what you want to learn in the AI Agent panel, or sketch ideas on the canvas.';
+      if (this.stepIndicator) this.stepIndicator.textContent = 'Blank Canvas';
+      if (this.hudStepBadge) this.hudStepBadge.textContent = 'Blackboard: Blank Canvas';
+      if (this.stepPrevBtn) this.stepPrevBtn.disabled = true;
+      if (this.stepNextBtn) this.stepNextBtn.disabled = true;
+      if (this.hudPrevBtn) this.hudPrevBtn.disabled = true;
+      if (this.hudNextBtn) this.hudNextBtn.disabled = true;
+      this.drawCanvas();
+      return;
+    }
     const step = this.currentSteps[this.currentStepIndex];
 
     const stepLabel = `Step ${this.currentStepIndex + 1} of ${this.currentSteps.length}`;
@@ -508,11 +528,8 @@ export class BlackboardView {
   }
 
   private drawCanvas(): void {
-    if (this.currentSteps.length === 0) return;
-    const step = this.currentSteps[this.currentStepIndex];
-
-    // Prefer hardware-accelerated Skia renderer if surface is active
-    if (this.skiaRenderer.hasSurface()) {
+    if (this.currentSteps.length > 0 && this.skiaRenderer.hasSurface()) {
+      const step = this.currentSteps[this.currentStepIndex];
       this.skiaRenderer.animateStep(step, 500);
       return;
     }
@@ -531,7 +548,9 @@ export class BlackboardView {
 
     this.drawGrid();
 
-    if (step.elements) {
+    if (this.currentSteps.length > 0) {
+      const step = this.currentSteps[this.currentStepIndex];
+      if (step && step.elements) {
       step.elements.forEach((el) => {
         if (!this.ctx) return;
         this.ctx.strokeStyle = el.color || '#00d4aa';
@@ -565,6 +584,7 @@ export class BlackboardView {
           PluginManager.getInstance().renderCustomElement(this.ctx, el);
         }
       });
+      }
     }
 
     // Render active in-progress stylus stroke

@@ -142,13 +142,14 @@ describe('End-to-End UI & QA Test Suite', () => {
       expect(input.placeholder).toBe('Message Unfold…');
     });
 
-    it('clicking Blackboard mode card opens visualization overlay with animated steps', () => {
+    it('clicking Blackboard mode card opens visualization overlay in blank state waiting for prompt', () => {
       new App();
       document.getElementById('blackboardMode')?.click();
 
       const overlay = document.getElementById('vizOverlay');
       expect(overlay?.classList.contains('visible')).toBe(true);
-      expect(document.getElementById('vizTitle')?.textContent).toContain('Introduction');
+      expect(document.getElementById('vizTitle')?.textContent).toBe('Blackboard');
+      expect(document.getElementById('stepIndicator')?.textContent).toBe('Blank Canvas');
     });
   });
 
