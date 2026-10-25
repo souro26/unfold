@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HomeView } from '../src/views/HomeView';
 import { ScreenTeachView } from '../src/views/ScreenTeachView';
 import { BlackboardView } from '../src/views/BlackboardView';
+import { RoughRenderer } from '../src/renderer-rough';
 import { ExportService } from '../src/services/export';
 
 describe('Views and Navigation', () => {
@@ -14,6 +15,7 @@ describe('Views and Navigation', () => {
       <div class="app"></div>
       <div id="vizOverlay" class="visualization-overlay">
         <canvas id="vizCanvas"></canvas>
+        <button id="vizRenderModeBtn"><span id="vizRenderModeLabel">🎨 Chalkboard</span></button>
         <button id="vizPresentation"></button>
         <button id="vizClose"></button>
         <button id="vizFullscreen"></button>
@@ -180,5 +182,58 @@ describe('Views and Navigation', () => {
       panX: 0,
       panY: 0,
     });
+  });
+
+  it('BlackboardView toggles between Chalkboard (Rough.js) and Precision (Skia) render engines', async () => {
+    const bbView = new BlackboardView();
+    expect(bbView.getRenderEngine()).toBe('rough');
+
+    // Toggle via method
+    bbView.toggleRenderEngine();
+    expect(bbView.getRenderEngine()).toBe('skia');
+    expect(document.getElementById('vizRenderModeLabel')?.textContent).toBe('📐 Precision');
+
+    // Toggle via UI button click
+    const toggleBtn = document.getElementById('vizRenderModeBtn');
+    toggleBtn?.click();
+    expect(bbView.getRenderEngine()).toBe('rough');
+    expect(document.getElementById('vizRenderModeLabel')?.textContent).toBe('🎨 Chalkboard');
+  });
+
+  it('RoughRenderer handles step rendering, SVG paths, shapes, and progressive animation safely', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 600;
+
+    const renderer = new RoughRenderer();
+    renderer.attach(canvas);
+
+    const step = {
+      step: 1,
+      title: 'Geometric Chalkboard Concepts',
+      explanation: 'Rough sketch with shapes and SVG path',
+      elements: [
+        { id: '1', type: 'rect' as const, start: { x: 50, y: 50 }, width: 120, height: 80, text: 'Block A' },
+        { id: '2', type: 'circle' as const, start: { x: 300, y: 150 }, radius: 45, text: 'Origin' },
+        { id: '3', type: 'line' as const, start: { x: 50, y: 50 }, end: { x: 200, y: 120 }, text: 'Vector' },
+        { id: '4', type: 'arrow' as const, start: { x: 200, y: 120 }, end: { x: 350, y: 220 }, text: 'Flow' },
+        { id: '5', type: 'path' as const, d: 'M 10 80 Q 95 10 180 80 T 350 80', text: 'Bezier Curve' },
+        { id: '6', type: 'pen' as const, points: [{ x: 10, y: 10 }, { x: 20, y: 25 }, { x: 40, y: 35 }] },
+        { id: '7', type: 'text' as const, start: { x: 100, y: 300 }, text: 'Definitive Takeaway' },
+      ],
+    };
+
+    // Safe execution without crashing in node/JSDOM
+    expect(() => {
+      renderer.renderStep(step, { zoom: 1.2, rotation: 15, panX: 10, panY: -20 });
+    }).not.toThrow();
+
+    expect(() => {
+      renderer.animateStep(step, 100);
+      renderer.stopAnimation();
+    }).not.toThrow();
+
+    renderer.detach();
+    expect(renderer.isAvailable()).toBe(false);
   });
 });

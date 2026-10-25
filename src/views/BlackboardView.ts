@@ -1,6 +1,7 @@
 import { BlackboardStep, Point, DrawingElement } from '../types';
 import { SpeechService } from '../services/speech';
 import { SkiaRenderer } from '../renderer-skia';
+import { RoughRenderer } from '../renderer-rough';
 import { ExportService } from '../services/export';
 import { PluginManager } from '../services/PluginManager';
 import { StylusService, StylusCurveProfile } from '../services/stylus';
@@ -27,6 +28,12 @@ export class BlackboardView {
   private stepIndicator: HTMLElement;
   private titleEl: HTMLElement;
   private descEl: HTMLElement;
+
+  // Render Engine (Rough.js Chalkboard primary, Skia / 2D fallback)
+  private roughRenderer: RoughRenderer;
+  private renderModeBtn: HTMLButtonElement | null = null;
+  private renderModeLabel: HTMLElement | null = null;
+  private renderEngine: 'rough' | 'skia' = 'rough';
 
   // Export elements
   private exportBtn: HTMLButtonElement | null;
@@ -145,10 +152,25 @@ export class BlackboardView {
     this.inspectRawJsonText = document.getElementById('inspectRawJsonText');
     this.inspectCopyJsonBtn = document.getElementById('inspectCopyJsonBtn') as HTMLButtonElement | null;
 
+    // Render mode toggle button
+    this.renderModeBtn = document.getElementById('vizRenderModeBtn') as HTMLButtonElement | null;
+    this.renderModeLabel = document.getElementById('vizRenderModeLabel');
+
     if (this.canvasEl) {
       this.ctx = this.canvasEl.getContext('2d');
     }
 
+    // Initialize RoughRenderer as Primary chalk engine
+    this.roughRenderer = new RoughRenderer();
+    if (this.canvasEl) {
+      this.roughRenderer.attach(this.canvasEl);
+    }
+    this.roughRenderer.onRenderError = () => {
+      console.warn('RoughRenderer failed, falling back to Skia / 2D');
+      this.drawCanvas();
+    };
+
+    // Skia WASM fallback renderer
     this.skiaRenderer = new SkiaRenderer();
     this.skiaRenderer.onRenderError = () => {
       this.drawCanvas2D();
@@ -159,6 +181,7 @@ export class BlackboardView {
   }
 
   private bindEvents(): void {
+    this.renderModeBtn?.addEventListener('click', () => this.toggleRenderEngine());
     this.backBtn?.addEventListener('click', () => {
       this.close();
       if (this.callbacks?.onBack) {
@@ -498,6 +521,26 @@ export class BlackboardView {
     this.drawCanvas();
   }
 
+  public toggleRenderEngine(): void {
+    this.setRenderEngine(this.renderEngine === 'rough' ? 'skia' : 'rough');
+  }
+
+  public setRenderEngine(engine: 'rough' | 'skia'): void {
+    this.renderEngine = engine;
+    if (this.renderModeLabel) {
+      if (engine === 'rough') {
+        this.renderModeLabel.textContent = '🎨 Chalkboard';
+      } else {
+        this.renderModeLabel.textContent = '📐 Precision';
+      }
+    }
+    this.drawCanvas();
+  }
+
+  public getRenderEngine(): 'rough' | 'skia' {
+    return this.renderEngine;
+  }
+
   public async open(steps: BlackboardStep[], reasoning?: any, rawJson?: string): Promise<void> {
     this.currentSteps = steps;
     this.currentStepIndex = 0;
@@ -506,7 +549,12 @@ export class BlackboardView {
     this.overlayEl?.classList.add('visible');
     this.renderCurrentStep();
 
-    // Attempt hardware-accelerated Skia WASM initialization
+    // Attach RoughRenderer as Primary chalk engine
+    if (this.canvasEl) {
+      this.roughRenderer.attach(this.canvasEl);
+    }
+
+    // Attempt hardware-accelerated Skia WASM initialization as fallback
     const skiaLoaded = await this.skiaRenderer.init();
     if (skiaLoaded && this.canvasEl) {
       this.skiaRenderer.attach(this.canvasEl);
@@ -525,6 +573,7 @@ export class BlackboardView {
     SpeechService.stop();
     this.exitPresentationMode();
     this.closeInspectDrawer();
+    this.roughRenderer.stopAnimation();
     this.skiaRenderer.destroy();
     this.overlayEl?.classList.remove('visible');
   }
@@ -569,6 +618,7 @@ export class BlackboardView {
     if (rect) {
       this.canvasEl.width = rect.width;
       this.canvasEl.height = rect.height;
+      this.roughRenderer.resize();
       this.skiaRenderer.resize();
       this.drawCanvas();
     }
@@ -605,20 +655,87 @@ export class BlackboardView {
 
     PluginManager.getInstance().notifyStepRender(step);
     this.updateInspectDrawer();
+
+    // Primary: Rough.js organic chalk sketching animation
+    if (this.renderEngine === 'rough') {
+      this.roughRenderer.animateStep(step, 450, this.viewport);
+      return;
+    }
+
+    // Fallback 1: Skia GPU
+    if (this.skiaRenderer.hasSurface()) {
+      try {
+        this.skiaRenderer.animateStep(step, 450);
+        return;
+      } catch (err) {
+        console.warn('Skia animation failed, falling back to 2D:', err);
+      }
+    }
+
+    // Fallback 2: Canvas 2D
     this.drawCanvas();
   }
 
   private drawCanvas(): void {
-    if (this.currentSteps.length > 0 && this.skiaRenderer.hasSurface()) {
+    if (this.currentSteps.length === 0) {
+      this.drawCanvas2D();
+      return;
+    }
+
+    const step = this.currentSteps[this.currentStepIndex];
+
+    // Primary: Rough.js Chalkboard engine
+    if (this.renderEngine === 'rough') {
       try {
-        const step = this.currentSteps[this.currentStepIndex];
+        const rendered = this.roughRenderer.renderStep(step, this.viewport);
+        if (rendered) {
+          this.drawActiveStylusStroke();
+          return;
+        }
+      } catch (err) {
+        console.warn('RoughRenderer renderStep failed, falling back:', err);
+      }
+    }
+
+    // Fallback 1: Skia GPU
+    if (this.skiaRenderer.hasSurface()) {
+      try {
         this.skiaRenderer.animateStep(step, 500);
         return;
       } catch (err) {
         console.warn('Skia animation failed, falling back to 2D:', err);
       }
     }
+
+    // Fallback 2: HTML5 2D Canvas
     this.drawCanvas2D();
+  }
+
+  private drawActiveStylusStroke(): void {
+    if (!this.ctx || !this.canvasEl || !this.activeStroke || this.activeStroke.length <= 1) return;
+    this.ctx.save();
+    const cx = this.canvasEl.width / 2;
+    const cy = this.canvasEl.height / 2;
+    this.ctx.translate(cx + this.viewport.panX, cy + this.viewport.panY);
+    this.ctx.rotate(this.viewport.rotation);
+    this.ctx.scale(this.viewport.zoom, this.viewport.zoom);
+    this.ctx.translate(-cx, -cy);
+
+    for (let i = 0; i < this.activeStroke.length - 1; i++) {
+      const p1 = this.activeStroke[i];
+      const p2 = this.activeStroke[i + 1];
+      const metrics = this.stylusService.calculateStrokeMetrics(p1, 3);
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.lineWidth = metrics.width;
+      this.ctx.globalAlpha = metrics.opacity;
+      this.ctx.strokeStyle = '#00f0ff';
+      this.ctx.moveTo(p1.x, p1.y);
+      this.ctx.lineTo(p2.x, p2.y);
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
+    this.ctx.restore();
   }
 
   public drawCanvas2D(): void {

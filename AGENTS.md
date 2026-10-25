@@ -184,7 +184,9 @@ unfold/
 - [x] IPC command bridge (`send_message`, `capture_screen`, `save_settings`, etc.)
 - [x] Frontend modular separation of concerns: `components/`, `views/`, `services/`, `styles/`, `types/`, `utils/`
 - [x] Freehand drawing with pressure + Catmull-Rom smoothing
-- [x] Skia WASM integration for frontend renderer (hardware-accelerated CanvasKit surface with animated drawing)
+- [x] Chalkboard hand-drawn rendering via Rough.js (`RoughRenderer` with organic chalk lines, arcs, fills, and full SVG path parsing)
+- [x] Skia WASM integration for frontend renderer (hardware-accelerated CanvasKit surface with animated drawing fallback)
+- [x] Dual-engine blackboard rendering: Primary Chalkboard (Rough.js) with automatic fallback to Skia GPU / Canvas 2D and header toggle button
 - [x] KaTeX math rendering in frontend (inline $...$ and block $$...$$)
 - [x] Presentation mode (hide all UI, floating HUD, step navigation, F5 toggle)
 - [x] Voice narration with multi-language support (ja-JP, zh-CN, hi-IN, es-ES, fr-FR, de-DE)

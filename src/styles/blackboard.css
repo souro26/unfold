@@ -64,6 +64,18 @@
   border-color: var(--accent-color, #00d4aa);
 }
 
+.viz-btn.viz-render-mode-btn {
+  background: rgba(255, 184, 108, 0.12);
+  border-color: rgba(255, 184, 108, 0.35);
+  color: #ffb86c;
+  font-weight: 500;
+}
+
+.viz-btn.viz-render-mode-btn:hover {
+  background: rgba(255, 184, 108, 0.24);
+  border-color: #ffb86c;
+}
+
 .viz-header .title {
   font-size: 16px;
   font-weight: 600;

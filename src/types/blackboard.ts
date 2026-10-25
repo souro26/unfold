@@ -1,4 +1,4 @@
-export type DrawingTool = 'select' | 'pen' | 'line' | 'rect' | 'circle' | 'arrow' | 'text' | 'eraser';
+export type DrawingTool = 'select' | 'pen' | 'line' | 'rect' | 'circle' | 'arrow' | 'text' | 'eraser' | 'path';
 
 export interface Point {
   x: number;
@@ -20,6 +20,10 @@ export interface DrawingElement {
   width?: number;
   height?: number;
   radius?: number;
+  d?: string;
+  fill?: string;
+  fillStyle?: 'hachure' | 'solid' | 'zigzag' | 'cross-hatch' | 'dots' | 'dashed';
+  roughness?: number;
 }
 
 export interface DeepReasoningMetadata {
