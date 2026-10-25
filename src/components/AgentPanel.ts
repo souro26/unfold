@@ -38,11 +38,14 @@ export class AgentPanelComponent {
     if (!this.panelEl) return;
     this.openState = true;
     this.panelEl.classList.add('open');
-    this.panelEl.setAttribute('aria-hidden', 'false');
+    this.panelEl.removeAttribute('aria-hidden');
   }
 
   public close(): void {
     if (!this.panelEl) return;
+    if (document.activeElement && this.panelEl.contains(document.activeElement)) {
+      (document.activeElement as HTMLElement).blur();
+    }
     this.openState = false;
     this.panelEl.classList.remove('open');
     this.panelEl.setAttribute('aria-hidden', 'true');
