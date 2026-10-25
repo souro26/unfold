@@ -23,12 +23,62 @@ describe('AgentOrchestrator Multi-Layer Reasoning System', () => {
     expect(pedagogy.commonMisconceptions[0]).toContain('Confusing');
   });
 
-  it('Layer 1: Deconstructs computer science / algorithm concepts properly', () => {
-    const pedagogy = orchestrator.deconstructPedagogy('explain binary search tree search');
+  it('Layer 1: Universally deconstructs ANY topic into a 4-scene progressive whiteboard sequence', () => {
+    // 1. Algorithms & Data Structures
+    const algoPedagogy = orchestrator.deconstructPedagogy('explain binary search tree search');
+    expect(algoPedagogy.domain).toBe('algorithms');
+    expect(algoPedagogy.progressionStages.length).toBe(4);
+    expect(algoPedagogy.progressionStages[0].title).toContain('Initial State');
+    expect(algoPedagogy.progressionStages[1].title).toContain('Traversal');
+    expect(algoPedagogy.progressionStages[2].title).toContain('Contrast');
+    expect(algoPedagogy.progressionStages[3].title).toContain('Computational Invariant');
 
-    expect(pedagogy.domain).toBe('algorithms');
-    expect(pedagogy.progressionStages.length).toBeGreaterThanOrEqual(3);
-    expect(pedagogy.coreIntuition).toContain('state transformation');
+    // 2. Physics & Mechanics
+    const physicsPedagogy = orchestrator.deconstructPedagogy('explain newtons second law of motion');
+    expect(physicsPedagogy.domain).toBe('physics');
+    expect(physicsPedagogy.progressionStages.length).toBe(4);
+    expect(physicsPedagogy.progressionStages[0].title).toContain('Physical Anchor');
+    expect(physicsPedagogy.progressionStages[1].title).toContain('Force');
+    expect(physicsPedagogy.progressionStages[2].title).toContain('Equilibrium');
+    expect(physicsPedagogy.progressionStages[3].title).toContain('Governing');
+
+    // 3. Distributed Systems
+    const sysPedagogy = orchestrator.deconstructPedagogy('explain microservices architecture and failover');
+    expect(sysPedagogy.domain).toBe('systems');
+    expect(sysPedagogy.progressionStages.length).toBe(4);
+    expect(sysPedagogy.progressionStages[0].title).toContain('Topology');
+    expect(sysPedagogy.progressionStages[1].title).toContain('Protocol');
+    expect(sysPedagogy.progressionStages[2].title).toContain('Contrast');
+    expect(sysPedagogy.progressionStages[3].title).toContain('System Invariant');
+
+    // 4. General Concept
+    const genPedagogy = orchestrator.deconstructPedagogy('how does photosynthesis work');
+    expect(genPedagogy.domain).toBe('general');
+    expect(genPedagogy.progressionStages.length).toBe(4);
+    expect(genPedagogy.progressionStages[0].title).toContain('Visual Foundation');
+    expect(genPedagogy.progressionStages[1].title).toContain('Core Mechanism');
+    expect(genPedagogy.progressionStages[2].title).toContain('Critical Contrast');
+    expect(genPedagogy.progressionStages[3].title).toContain('Definitive Takeaway');
+  });
+
+  it('Layer 2: Generates 4-scene spatial blueprints across all domains', () => {
+    // Physics Blueprint
+    const physicsPed = orchestrator.deconstructPedagogy('explain newtons second law of motion');
+    const physicsSpatial = orchestrator.architectSpatialBlueprint(physicsPed);
+    expect(physicsSpatial.stepBlueprints.length).toBe(4);
+    expect(physicsSpatial.stepBlueprints[0].elements.some((e) => e.text?.includes('Mass'))).toBe(true);
+    expect(physicsSpatial.stepBlueprints[1].elements.some((e) => e.text?.includes('Applied Force'))).toBe(true);
+    expect(physicsSpatial.stepBlueprints[2].elements.some((e) => e.text?.includes('Equilibrium') || e.text?.includes('Net Force'))).toBe(true);
+    expect(physicsSpatial.stepBlueprints[3].elements.some((e) => e.text?.includes('m·a'))).toBe(true);
+
+    // Systems Blueprint
+    const sysPed = orchestrator.deconstructPedagogy('explain microservices architecture');
+    const sysSpatial = orchestrator.architectSpatialBlueprint(sysPed);
+    expect(sysSpatial.stepBlueprints.length).toBe(4);
+    expect(sysSpatial.stepBlueprints[0].elements.some((e) => e.text?.includes('Client'))).toBe(true);
+    expect(sysSpatial.stepBlueprints[1].elements.some((e) => e.text?.includes('gRPC') || e.text?.includes('Payload'))).toBe(true);
+    expect(sysSpatial.stepBlueprints[2].elements.some((e) => e.text?.includes('Circuit Break') || e.text?.includes('Cache'))).toBe(true);
+    expect(sysSpatial.stepBlueprints[3].elements.some((e) => e.text?.includes('Availability'))).toBe(true);
   });
 
   it('Layer 2: Generates spatial blueprint with exact geometric coordinates and semantic color palette', () => {
