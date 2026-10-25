@@ -55,9 +55,9 @@ export class SettingsModalComponent {
           </div>
           <div class="form-group">
             <label for="modelInput">Teaching / Chat Model (The Brain)</label>
-            <input type="text" id="modelInput" class="setting-input" value="${escapeHtml(settings.model || 'meta/llama-3.3-70b-instruct')}" placeholder="e.g. meta/llama-3.3-70b-instruct" />
+            <input type="text" id="modelInput" class="setting-input" value="${escapeHtml(settings.model && !settings.model.includes('llama-3.3-70b') ? settings.model : 'nvidia/nemotron-3.5-bolt-e4b')}" placeholder="e.g. nvidia/nemotron-3.5-bolt-e4b" />
             <span class="setting-hint" style="font-size:11px;color:var(--text-muted);margin-top:2px;display:block;">
-              NVIDIA options: <code>meta/llama-3.3-70b-instruct</code>, <code>nvidia/nemotron-3.5-bolt-e4b</code>
+              NVIDIA options: <code>nvidia/nemotron-3.5-bolt-e4b</code>, <code>nvidia/nemotron-3-ultra-550b-a55b</code>
             </span>
           </div>
           <div class="form-group">
@@ -102,8 +102,8 @@ export class SettingsModalComponent {
       if (val === 'nvidia') {
         apiKeyHint.innerHTML = 'One free API key powers Brain, Vision, and Voice! Get key at <a href="https://build.nvidia.com" target="_blank" style="color:var(--accent-teal, #00d4aa);text-decoration:underline;">build.nvidia.com</a>';
         apiKeyInput.placeholder = 'nvapi-...';
-        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('nemotron') || modelInput.value === 'llama3') {
-          modelInput.value = 'meta/llama-3.3-70b-instruct';
+        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('llama') || modelInput.value === 'llama3') {
+          modelInput.value = 'nvidia/nemotron-3.5-bolt-e4b';
         }
         if (!visionModelInput.value || visionModelInput.value.includes('gemini')) {
           visionModelInput.value = 'nvidia/nemotron-3.5-super-vl-120b-a12b';
@@ -114,13 +114,13 @@ export class SettingsModalComponent {
       } else if (val === 'llama_cpp') {
         apiKeyHint.textContent = 'Optional for local models (defaults to http://localhost:8080/v1)';
         apiKeyInput.placeholder = 'Optional';
-        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('llama-3.3') || modelInput.value === 'llama3') {
+        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('llama') || modelInput.value.includes('nemotron-3.5') || modelInput.value === 'llama3') {
           modelInput.value = 'nemotron-3-4b-int4';
         }
       } else if (val === 'ollama') {
         apiKeyHint.textContent = 'Optional for local models (defaults to http://localhost:11434)';
         apiKeyInput.placeholder = 'Optional';
-        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('llama-3.3') || modelInput.value.includes('nemotron')) {
+        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('nemotron')) {
           modelInput.value = 'llama3';
         }
       } else {
@@ -162,7 +162,7 @@ export class SettingsModalComponent {
 
     const newSettings: Settings = {
       llm_provider: (providerSelect.value as LLMProvider) || 'nvidia',
-      model: modelInput.value.trim() || 'meta/llama-3.3-70b-instruct',
+      model: modelInput.value.trim() && !modelInput.value.includes('llama-3.3-70b') ? modelInput.value.trim() : 'nvidia/nemotron-3.5-bolt-e4b',
       vision_model: visionModelInput ? visionModelInput.value.trim() || 'nvidia/nemotron-3.5-super-vl-120b-a12b' : undefined,
       tts_provider: ttsSelect ? (ttsSelect.value as 'nvidia' | 'system') : 'nvidia',
       tts_model: 'nvidia/magpie-tts-zeroshot',

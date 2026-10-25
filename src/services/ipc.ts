@@ -30,7 +30,7 @@ export async function getSettings(): Promise<Settings> {
   return {
     llm_provider: 'nvidia',
     api_key: null,
-    model: 'meta/llama-3.3-70b-instruct',
+    model: 'nvidia/nemotron-3.5-bolt-e4b',
     temperature: 0.7,
     max_tokens: 4096,
   };

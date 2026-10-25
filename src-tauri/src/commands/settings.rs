@@ -44,7 +44,7 @@ impl Default for Settings {
         Self {
             llm_provider: "nvidia".into(),
             api_key: None,
-            model: "meta/llama-3.3-70b-instruct".into(),
+            model: "nvidia/nemotron-3.5-bolt-e4b".into(),
             theme: "dark".into(),
             screen_capture_permission: true,
             temperature: Some(0.7),
@@ -71,7 +71,12 @@ fn load_saved_settings() -> Settings {
     if let Some(path) = get_config_path() {
         if path.exists() {
             if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Ok(settings) = serde_json::from_str::<Settings>(&content) {
+                if let Ok(mut settings) = serde_json::from_str::<Settings>(&content) {
+                    // Auto-migrate deprecated models (e.g. meta/llama-3.3-70b-instruct reached EOL on 2026-08-26)
+                    if settings.model.contains("llama-3.3-70b") || settings.model.is_empty() {
+                        settings.model = "nvidia/nemotron-3.5-bolt-e4b".into();
+                        persist_settings(&settings);
+                    }
                     return settings;
                 }
             }
@@ -133,7 +138,7 @@ mod tests {
     fn test_default_settings() {
         let defaults = Settings::default();
         assert_eq!(defaults.llm_provider, "nvidia");
-        assert_eq!(defaults.model, "meta/llama-3.3-70b-instruct");
+        assert_eq!(defaults.model, "nvidia/nemotron-3.5-bolt-e4b");
         assert!(defaults.screen_capture_permission);
         assert_eq!(defaults.api_key, None);
     }
@@ -143,7 +148,7 @@ mod tests {
         let settings = Settings {
             llm_provider: "nvidia".into(),
             api_key: Some("nvapi-test-123".into()),
-            model: "meta/llama-3.3-70b-instruct".into(),
+            model: "nvidia/nemotron-3.5-bolt-e4b".into(),
             theme: "dark".into(),
             screen_capture_permission: true,
             temperature: Some(0.7),

@@ -25,32 +25,43 @@ function setupFullDOM(): void {
       </div>
 
       <main class="main" id="mainArea">
+        <button id="screenTeachBackBtn" class="screen-teach-back-btn"></button>
+        <button id="screenAgentToggleBtn" class="screen-agent-toggle-btn"></button>
+
         <div class="conversation-area" id="conversationArea">
           <div id="emptyState" class="empty-state">
             <button id="screenTeachMode" class="mode-card"></button>
             <button id="blackboardMode" class="mode-card"></button>
           </div>
-          <div class="messages" id="messages" style="display: none;"></div>
         </div>
 
-        <div class="composer">
-          <div class="composer-inner">
-            <div class="composer-wrapper" id="composerWrapper">
-              <textarea id="composerInput" placeholder="Message Unfold…"></textarea>
-              <div class="composer-actions">
-                <button class="composer-btn" id="attachBtn"></button>
-                <button class="composer-btn send" id="sendBtn"></button>
-                <button class="composer-btn overlay-close-trigger" id="overlayCloseTrigger"></button>
+        <aside class="agent-panel" id="agentPanel">
+          <button id="closeAgentPanelBtn"></button>
+          <button id="agentPanelClearBtn"></button>
+          <div class="agent-panel-body" id="agentPanelBody">
+            <div class="messages" id="messages" style="display: none;"></div>
+          </div>
+          <div class="composer" id="composerContainer" style="display: none;">
+            <div class="composer-inner">
+              <div class="composer-wrapper" id="composerWrapper">
+                <textarea id="composerInput" placeholder="Message Unfold…"></textarea>
+                <div class="composer-actions">
+                  <button class="composer-btn" id="attachBtn"></button>
+                  <button class="composer-btn send" id="sendBtn"></button>
+                  <button class="composer-btn overlay-close-trigger" id="overlayCloseTrigger"></button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </aside>
       </main>
     </div>
 
     <!-- Blackboard Visualization Overlay -->
     <div class="visualization-overlay" id="vizOverlay">
       <div class="viz-header">
+        <button id="vizBackBtn" class="viz-btn"></button>
+        <button id="vizAgentToggleBtn" class="viz-btn"></button>
         <div class="title" id="vizTitle">Visualization</div>
         <div class="viz-actions">
           <button class="viz-btn" id="vizPresentation"></button>
@@ -436,6 +447,79 @@ describe('End-to-End UI & QA Test Suite', () => {
       await app.toggleClickThrough();
       expect(document.getElementById('ctStatus')?.textContent).toBe('OFF');
       expect(document.getElementById('clickThroughToggle')?.classList.contains('active')).toBe(false);
+    });
+  });
+
+  describe('7. Navigation, Back Buttons & AI Agent Side Panel QA', () => {
+    it('hides chatbox on opening page until user selects a mode or chat', () => {
+      new App();
+      const emptyState = document.getElementById('emptyState');
+      const composer = document.getElementById('composerContainer');
+      const agentPanel = document.getElementById('agentPanel');
+
+      expect(emptyState?.style.display).not.toBe('none');
+      expect(composer?.style.display).toBe('none');
+      expect(agentPanel?.classList.contains('open')).toBe(false);
+    });
+
+    it('opens side panel and displays composer when entering Screen Teach mode', () => {
+      new App();
+      const screenBtn = document.getElementById('screenTeachMode');
+      screenBtn?.click();
+
+      const composer = document.getElementById('composerContainer');
+      const agentPanel = document.getElementById('agentPanel');
+      expect(composer?.style.display).toBe('block');
+      expect(agentPanel?.classList.contains('open')).toBe(true);
+      expect(document.body.classList.contains('screen-overlay-mode')).toBe(true);
+    });
+
+    it('top-left Screen Teach Back button returns user to main home screen and hides composer', () => {
+      new App();
+      document.getElementById('screenTeachMode')?.click();
+      expect(document.body.classList.contains('screen-overlay-mode')).toBe(true);
+
+      const backBtn = document.getElementById('screenTeachBackBtn');
+      backBtn?.click();
+
+      expect(document.body.classList.contains('screen-overlay-mode')).toBe(false);
+      expect(document.getElementById('emptyState')?.style.display).not.toBe('none');
+      expect(document.getElementById('composerContainer')?.style.display).toBe('none');
+      expect(document.getElementById('agentPanel')?.classList.contains('open')).toBe(false);
+    });
+
+    it('top-left Blackboard Back button closes diagram, returns to Home, and hides composer', () => {
+      new App();
+      document.getElementById('blackboardMode')?.click();
+      const vizOverlay = document.getElementById('vizOverlay');
+      expect(vizOverlay?.classList.contains('visible')).toBe(true);
+
+      const backBtn = document.getElementById('vizBackBtn');
+      backBtn?.click();
+
+      expect(vizOverlay?.classList.contains('visible')).toBe(false);
+      expect(document.getElementById('emptyState')?.style.display).not.toBe('none');
+      expect(document.getElementById('composerContainer')?.style.display).toBe('none');
+    });
+
+    it('toggles AI Agent side panel via Ctrl+Shift+A and panel close button', () => {
+      const app = new App();
+      const agentPanel = document.getElementById('agentPanel');
+      expect(agentPanel?.classList.contains('open')).toBe(false);
+
+      // Trigger Ctrl+Shift+A
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, shiftKey: true }));
+      expect(agentPanel?.classList.contains('open')).toBe(true);
+
+      // Close via close button
+      document.getElementById('closeAgentPanelBtn')?.click();
+      expect(agentPanel?.classList.contains('open')).toBe(false);
+
+      // Direct toggle method
+      app.toggleAgentPanel();
+      expect(agentPanel?.classList.contains('open')).toBe(true);
+      app.toggleAgentPanel();
+      expect(agentPanel?.classList.contains('open')).toBe(false);
     });
   });
 });

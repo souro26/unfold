@@ -770,8 +770,12 @@ async fn call_nvidia_vision(request: VisionRequest) -> Result<VisionResponse, St
         },
     ];
 
-    let model = if request.model.is_empty() || request.model.contains("gemini") {
-        "meta/llama-3.2-11b-vision-instruct".to_string()
+    let model = if request.model.is_empty()
+        || request.model.contains("llama")
+        || request.model.contains("gemini")
+        || request.model == "nvidia/nemotron-3.5-bolt-e4b"
+        || (!request.model.contains("vl") && !request.model.contains("vision")) {
+        "nvidia/nemotron-3.5-super-vl-120b-a12b".to_string()
     } else {
         request.model.clone()
     };

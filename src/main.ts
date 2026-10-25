@@ -13,6 +13,7 @@ import { formatTime } from './utils/helpers';
 import { SidebarComponent } from './components/Sidebar';
 import { ComposerComponent } from './components/Composer';
 import { SettingsModalComponent } from './components/SettingsModal';
+import { AgentPanelComponent } from './components/AgentPanel';
 import { HomeView } from './views/HomeView';
 import { ScreenTeachView } from './views/ScreenTeachView';
 import { BlackboardView } from './views/BlackboardView';
@@ -21,6 +22,7 @@ export class App {
   private sidebar: SidebarComponent;
   private composer: ComposerComponent;
   private settingsModal: SettingsModalComponent;
+  private agentPanel: AgentPanelComponent;
   private homeView: HomeView;
   private screenTeachView: ScreenTeachView;
   private blackboardView: BlackboardView;
@@ -48,6 +50,10 @@ export class App {
       onExitOverlay: () => this.exitScreenOverlay(),
     });
 
+    this.agentPanel = new AgentPanelComponent({
+      onClear: () => this.clearMessages(),
+    });
+
     this.settingsModal = new SettingsModalComponent();
 
     // Initialize Views
@@ -59,14 +65,22 @@ export class App {
     this.screenTeachView = new ScreenTeachView({
       onExit: () => {
         this.composer.setPlaceholder('Message Unfold…');
-        const active = this.getActiveConversation();
-        if (!active || active.messages.length === 0) {
-          this.homeView.show();
-        }
+        this.composer.hide();
+        this.agentPanel.close();
+        this.homeView.show();
       },
+      onToggleAgent: () => this.toggleAgentPanel(),
     });
 
-    this.blackboardView = new BlackboardView();
+    this.blackboardView = new BlackboardView({
+      onBack: () => {
+        this.composer.setPlaceholder('Message Unfold…');
+        this.composer.hide();
+        this.agentPanel.close();
+        this.homeView.show();
+      },
+      onToggleAgent: () => this.toggleAgentPanel(),
+    });
 
     this.init();
   }
@@ -97,9 +111,13 @@ export class App {
     const conv = this.getActiveConversation();
     if (conv && conv.messages.length > 0) {
       this.homeView.hide();
+      this.composer.show();
+      this.agentPanel.open();
       this.renderMessages(conv.messages);
     } else {
       this.homeView.show();
+      this.composer.hide();
+      this.agentPanel.close();
       this.clearMessages();
     }
   }
@@ -109,7 +127,8 @@ export class App {
     this.conversations = loadConversations();
     this.selectConversation(conv.id);
     this.homeView.show();
-    this.composer.focus();
+    this.composer.hide();
+    this.agentPanel.close();
   }
 
   public handleDeleteConversation(id: string): void {
@@ -178,7 +197,7 @@ export class App {
   }
 
   public scrollToBottom(): void {
-    const area = document.getElementById('conversationArea');
+    const area = document.getElementById('agentPanelBody') || document.getElementById('conversationArea');
     if (area) area.scrollTop = area.scrollHeight;
   }
 
@@ -192,6 +211,8 @@ export class App {
     }
 
     this.homeView.hide();
+    this.composer.show();
+    this.agentPanel.open();
     this.messagesContainer.style.display = 'flex';
 
     let screenImageBase64: string | undefined = undefined;
@@ -273,18 +294,39 @@ export class App {
     }
   }
 
+  public toggleAgentPanel(forceState?: boolean): void {
+    if (forceState !== undefined) {
+      if (forceState) this.agentPanel.open();
+      else this.agentPanel.close();
+    } else {
+      this.agentPanel.toggle();
+    }
+    if (this.agentPanel.isOpen()) {
+      this.composer.show();
+      this.composer.focus();
+    }
+  }
+
   public enterScreenOverlay(): void {
     this.screenTeachView.enter();
     this.homeView.hide();
+    this.composer.show();
+    this.agentPanel.open();
     this.composer.setPlaceholder("Ask anything about what's on your screen… (Esc to exit)");
     this.composer.focus();
   }
 
   public exitScreenOverlay(): void {
     this.screenTeachView.exit();
+    this.composer.hide();
+    this.agentPanel.close();
+    this.homeView.show();
   }
 
   public enterBlackboard(): void {
+    this.homeView.hide();
+    this.composer.show();
+    this.composer.setPlaceholder("Ask anything about this blackboard diagram…");
     const sampleSteps: BlackboardStep[] = [
       {
         step: 1,
@@ -325,14 +367,26 @@ export class App {
           this.exitScreenOverlay();
           return;
         }
+        if (this.blackboardView.isOpen()) {
+          this.blackboardView.close();
+          this.homeView.show();
+          return;
+        }
         if (this.settingsModal.isOpen()) {
           this.settingsModal.close();
           return;
         }
-        if (this.blackboardView.isOpen()) {
-          this.blackboardView.close();
+        if (this.agentPanel.isOpen()) {
+          this.agentPanel.close();
           return;
         }
+      }
+
+      // Ctrl/Cmd + Shift + A: Toggle AI Agent Side Panel
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        this.toggleAgentPanel();
+        return;
       }
 
       // Ctrl/Cmd + Shift + U: Toggle Overlay visibility

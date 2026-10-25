@@ -4,6 +4,7 @@ export interface ComposerCallbacks {
 }
 
 export class ComposerComponent {
+  private containerEl: HTMLElement | null;
   private wrapperEl: HTMLElement;
   private inputEl: HTMLTextAreaElement;
   private sendBtn: HTMLButtonElement;
@@ -13,6 +14,7 @@ export class ComposerComponent {
   constructor(callbacks: ComposerCallbacks) {
     this.callbacks = callbacks;
     this.wrapperEl = document.getElementById('composerWrapper') as HTMLElement;
+    this.containerEl = (document.getElementById('composerContainer') || this.wrapperEl?.closest('.composer')) as HTMLElement | null;
     this.inputEl = document.getElementById('composerInput') as HTMLTextAreaElement;
     this.sendBtn = document.getElementById('sendBtn') as HTMLButtonElement;
     this.overlayCloseBtn = document.getElementById('overlayCloseTrigger') as HTMLButtonElement | null;
@@ -73,5 +75,24 @@ export class ComposerComponent {
     if (this.inputEl) this.inputEl.disabled = disabled;
     if (this.sendBtn) this.sendBtn.disabled = disabled;
     this.wrapperEl?.classList.toggle('streaming', disabled);
+  }
+
+  public show(): void {
+    if (this.containerEl) {
+      this.containerEl.style.display = 'block';
+      this.containerEl.classList.remove('hidden');
+    }
+  }
+
+  public hide(): void {
+    if (this.containerEl) {
+      this.containerEl.style.display = 'none';
+      this.containerEl.classList.add('hidden');
+    }
+  }
+
+  public isVisible(): boolean {
+    if (!this.containerEl) return false;
+    return this.containerEl.style.display !== 'none' && !this.containerEl.classList.contains('hidden');
   }
 }

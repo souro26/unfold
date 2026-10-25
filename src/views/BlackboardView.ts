@@ -5,10 +5,18 @@ import { ExportService } from '../services/export';
 import { PluginManager } from '../services/PluginManager';
 import { StylusService, StylusCurveProfile } from '../services/stylus';
 
+export interface BlackboardViewCallbacks {
+  onBack?: () => void;
+  onToggleAgent?: () => void;
+}
+
 export class BlackboardView {
+  private callbacks?: BlackboardViewCallbacks;
   private overlayEl: HTMLElement;
   private canvasEl: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null = null;
+  private backBtn: HTMLButtonElement | null = null;
+  private agentToggleBtn: HTMLButtonElement | null = null;
   private closeBtn: HTMLButtonElement;
   private fullscreenBtn: HTMLButtonElement;
   private presentationBtn: HTMLButtonElement;
@@ -63,9 +71,12 @@ export class BlackboardView {
     lastPanY: 0,
   };
 
-  constructor() {
+  constructor(callbacks?: BlackboardViewCallbacks) {
+    this.callbacks = callbacks;
     this.overlayEl = document.getElementById('vizOverlay') as HTMLElement;
     this.canvasEl = document.getElementById('vizCanvas') as HTMLCanvasElement;
+    this.backBtn = document.getElementById('vizBackBtn') as HTMLButtonElement | null;
+    this.agentToggleBtn = document.getElementById('vizAgentToggleBtn') as HTMLButtonElement | null;
     this.closeBtn = document.getElementById('vizClose') as HTMLButtonElement;
     this.fullscreenBtn = document.getElementById('vizFullscreen') as HTMLButtonElement;
     this.presentationBtn = document.getElementById('vizPresentation') as HTMLButtonElement;
@@ -103,7 +114,23 @@ export class BlackboardView {
   }
 
   private bindEvents(): void {
-    this.closeBtn?.addEventListener('click', () => this.close());
+    this.backBtn?.addEventListener('click', () => {
+      this.close();
+      if (this.callbacks?.onBack) {
+        this.callbacks.onBack();
+      }
+    });
+    this.agentToggleBtn?.addEventListener('click', () => {
+      if (this.callbacks?.onToggleAgent) {
+        this.callbacks.onToggleAgent();
+      }
+    });
+    this.closeBtn?.addEventListener('click', () => {
+      this.close();
+      if (this.callbacks?.onBack) {
+        this.callbacks.onBack();
+      }
+    });
     this.fullscreenBtn?.addEventListener('click', () => this.toggleFullscreen());
     this.presentationBtn?.addEventListener('click', () => this.togglePresentationMode());
     this.stepPrevBtn?.addEventListener('click', () => this.prevStep());

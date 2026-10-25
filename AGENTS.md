@@ -123,13 +123,14 @@ unfold/
 │   ├── overlay.html          # Overlay UI template
 │   ├── main.ts               # Frontend app orchestrator & event coordinator
 │   ├── components/           # Reusable UI components
+│   │   ├── AgentPanel.ts     # IDE-style collapsible right AI Agent panel
 │   │   ├── Composer.ts       # Auto-resizing textarea, send actions, overlay exit
 │   │   ├── SettingsModal.ts  # Model configuration, dynamic API hints, Escape/backdrop handling
 │   │   └── Sidebar.ts        # Conversation list, chat deletion, collapse toggle
 │   ├── views/                # Full-screen and overlay view controllers
-│   │   ├── BlackboardView.ts # Skia WASM + 2D canvas, steps, presentation HUD, gestures
-│   │   ├── HomeView.ts       # Empty state and mode selection cards
-│   │   └── ScreenTeachView.ts # Translucent screen overlay mode
+│   │   ├── BlackboardView.ts # Skia WASM + 2D canvas, steps, presentation HUD, gestures, top-left Back button
+│   │   ├── HomeView.ts       # Clean empty state and mode selection cards (composer hidden until mode selected)
+│   │   └── ScreenTeachView.ts # Translucent screen overlay mode, top-left Back button
 │   ├── services/             # Core business logic & storage
 │   │   ├── collaboration.ts  # WebRTC + Yjs multi-user synchronization
 │   │   ├── export.ts         # Mermaid, Excalidraw, PlantUML, Manim exports
@@ -139,14 +140,14 @@ unfold/
 │   │   └── storage.ts        # Local chat persistence, auto-titling, JSON backup
 │   ├── styles/               # Modular vanilla CSS design system
 │   │   ├── base.css
-│   │   ├── composer.css
-│   │   ├── modal.css
-│   │   ├── overlay.css
-│   │   ├── sidebar.css
-│   │   └── visualization.css
+│   │   ├── blackboard.css
+│   │   ├── chat.css
+│   │   ├── screen-teach.css
+│   │   ├── settings.css
+│   │   └── sidebar.css
 │   ├── types/                # TypeScript type definitions
 │   └── utils/                # Markdown, KaTeX, and helper utilities
-├── tests/                    # Vitest comprehensive unit & QA test suite (8 test files, 58 tests)
+├── tests/                    # Vitest comprehensive unit & QA test suite (9 test files, 69 tests)
 │   ├── collaboration.test.ts
 │   ├── export.test.ts
 │   ├── markdown.test.ts
@@ -166,10 +167,15 @@ unfold/
 - [x] Rust type system for DrawingPlan, Elements, Steps, Viewport
 - [x] Overlay window manager with per-monitor support
 - [x] Click-through toggle (Windows `WS_EX_TRANSPARENT`, macOS `ignoresMouseEvents`)
-- [x] Global shortcuts: `Ctrl+Shift+U` (toggle), `Ctrl+I` (command palette), `Esc` (click-through)
+- [x] Global shortcuts: `Ctrl+Shift+U` (toggle), `Ctrl+I` (command palette), `Ctrl+Shift+A` (AI Agent panel), `Esc` (click-through / exit)
 - [x] System tray with show/quit menu
 - [x] Settings persistence (LLM providers, overlay, drawing, vision, hotkeys)
-- [x] Universal LLM planner (Groq, Gemini, Ollama, OpenAI, Mock, llama.cpp sidecar)
+- [x] Universal LLM planner & chat (NVIDIA Nemotron 3.5 Bolt, Groq, Gemini, Ollama, OpenAI, Mock, llama.cpp sidecar)
+- [x] Auto-migration of deprecated models (`meta/llama-3.3-70b-instruct` -> `nvidia/nemotron-3.5-bolt-e4b`)
+- [x] Multimodal vision reasoning (`nvidia/nemotron-3.5-super-vl-120b-a12b`)
+- [x] Clean Home page: chatbox hidden on opening screen, activated on mode selection or active chat
+- [x] IDE-Style AI Agent right side panel (collapsible, dedicated toggle buttons, keeping drawing area clean)
+- [x] Prominent top-left BACK buttons on both Blackboard and Screen Teach views returning to Home
 - [x] Tier 1 vision: Window metadata capture (Windows/macOS/Linux stubs)
 - [x] Tier 2 vision: Tesseract OCR integration
 - [x] Tier 3 vision: Local model loader (Moondream2, Phi-3-Vision, YOLO)
@@ -190,7 +196,7 @@ unfold/
 - [x] Robust local chat persistence: auto-titling, in-memory fallback, and JSON export/import
 - [x] Hardware stylus pen tilt and pressure calibration curves (soft, firm, calligraphic profiles, Catmull-Rom splines)
 - [x] Packaging & Release: Generated Windows NSIS setup (9.10 MiB) and MSI (11.96 MiB) installers (`npx tauri build`)
-- [x] Comprehensive QA and E2E test suite (64 Vitest tests + 10 Rust unit/integration tests)
+- [x] Comprehensive QA and E2E test suite (69 Vitest tests + 10 Rust unit/integration tests)
 
 ### 📋 Next Steps & Distribution Roadmap (v0.2.0+)
 - [ ] Bundling llama-server executable sidecar into Tauri distribution bundle

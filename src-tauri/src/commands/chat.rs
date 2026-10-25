@@ -106,7 +106,12 @@ pub async fn send_message(
         .or_else(|| request.as_ref().and_then(|r| r.conversation_id.clone()));
     let img = image_base64
         .or_else(|| request.as_ref().and_then(|r| r.image_base64.clone()));
-    let model = settings.model.clone();
+    let mut model = settings.model.clone();
+    if model.is_empty() || model.contains("llama-3.3-70b") {
+        if settings.llm_provider == "nvidia" {
+            model = "nvidia/nemotron-3.5-bolt-e4b".to_string();
+        }
+    }
 
     // If screen image context is attached, dispatch to vision pipeline
     if let Some(image_data) = img {

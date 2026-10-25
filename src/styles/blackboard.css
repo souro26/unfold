@@ -25,6 +25,45 @@
   border-bottom: 1px solid var(--border-color);
 }
 
+.viz-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.viz-back-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 500;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.viz-back-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateX(-2px);
+  color: #fff;
+}
+
+.viz-btn.agent-toggle-btn {
+  background: rgba(0, 212, 170, 0.12);
+  border-color: rgba(0, 212, 170, 0.3);
+  color: var(--accent-color, #00d4aa);
+  font-weight: 500;
+}
+
+.viz-btn.agent-toggle-btn:hover {
+  background: rgba(0, 212, 170, 0.22);
+  border-color: var(--accent-color, #00d4aa);
+}
+
 .viz-header .title {
   font-size: 16px;
   font-weight: 600;
