@@ -7,7 +7,7 @@ import {
   setActiveConversationId,
   deleteConversation,
 } from './services/storage';
-import { setClickThrough, toggleOverlay, sendMessage, captureScreen } from './services/ipc';
+import { setClickThrough, toggleOverlay, captureScreen } from './services/ipc';
 import { renderMarkdown } from './utils/markdown';
 import { formatTime } from './utils/helpers';
 import { SidebarComponent } from './components/Sidebar';
@@ -17,6 +17,7 @@ import { AgentPanelComponent } from './components/AgentPanel';
 import { HomeView } from './views/HomeView';
 import { ScreenTeachView } from './views/ScreenTeachView';
 import { BlackboardView } from './views/BlackboardView';
+import { AgentOrchestrator } from './services/AgentOrchestrator';
 
 export class App {
   private sidebar: SidebarComponent;
@@ -238,7 +239,7 @@ export class App {
     this.appendMessageDOM(userMsg);
     this.scrollToBottom();
 
-    // Stream / Request AI response
+    // Stream / Request AI response via Multi-Layer Agent Pipeline
     this.isStreaming = true;
     this.composer.setDisabled(true);
 
@@ -250,19 +251,57 @@ export class App {
     };
     const msgEl = this.appendMessageDOM(assistantMsg);
     const textEl = msgEl.querySelector('.message-text') as HTMLElement;
-    textEl.innerHTML = `
-      <div class="streaming-indicator">
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
-      </div>
-    `;
+
+    const updatePipelineHUD = (activeLayer: 1 | 2 | 3) => {
+      textEl.innerHTML = `
+        <div class="agent-thinking-pipeline">
+          <div class="agent-pipeline-header">
+            <span>🧠 Multi-Layer Agent Reasoning Engine</span>
+          </div>
+          <div class="agent-pipeline-steps">
+            <div class="agent-step-item ${activeLayer === 1 ? 'active' : 'completed'}" id="agentStep1">
+              <span class="agent-step-icon">${activeLayer > 1 ? '✓' : '1'}</span>
+              <span class="agent-step-text">Layer 1: Concept & Pedagogical Deconstruction</span>
+            </div>
+            <div class="agent-step-item ${activeLayer === 2 ? 'active' : (activeLayer > 2 ? 'completed' : '')}" id="agentStep2">
+              <span class="agent-step-icon">${activeLayer > 2 ? '✓' : '2'}</span>
+              <span class="agent-step-text">Layer 2: Spatial Blueprint & Coordinate Geometry</span>
+            </div>
+            <div class="agent-step-item ${activeLayer === 3 ? 'active' : ''}" id="agentStep3">
+              <span class="agent-step-icon">3</span>
+              <span class="agent-step-text">Layer 3: Drawing Agent Synthesis (Rough.js)</span>
+            </div>
+          </div>
+        </div>
+      `;
+      this.scrollToBottom();
+    };
+
+    updatePipelineHUD(1);
 
     try {
-      const response = await sendMessage(text, this.activeConversationId!, screenImageBase64);
-      assistantMsg.content = response;
+      const orchestrator = AgentOrchestrator.getInstance();
+      const result = await orchestrator.executePipeline(
+        text,
+        this.activeConversationId!,
+        screenImageBase64,
+        (status) => {
+          updatePipelineHUD(status.layer);
+        }
+      );
+
+      assistantMsg.content = result.markdownResponse;
       assistantMsg.streaming = false;
-      textEl.innerHTML = renderMarkdown(response);
+
+      // Render markdown response + collapsible multi-layer reasoning disclosure
+      const markdownHtml = renderMarkdown(result.markdownResponse);
+      const reasoningDisclosureHtml = `
+        <details class="agent-reasoning-disclosure">
+          <summary>🧠 View Multi-Layer Agent Reasoning Trace</summary>
+          <div class="agent-reasoning-content"><strong>[LAYER 1: PEDAGOGICAL DECONSTRUCTION]</strong>\n${result.trace.pedagogicalReasoning}\n\n<strong>[LAYER 2: SPATIAL BLUEPRINT & COORDINATES]</strong>\n${result.trace.spatialBlueprintReasoning}\n\n<strong>[LAYER 3: MASTER PROMPT SYNTHESIS]</strong>\n${result.trace.synthesisReasoning}</div>
+        </details>
+      `;
+      textEl.innerHTML = markdownHtml + reasoningDisclosureHtml;
 
       // Re-bind code copy buttons
       msgEl.querySelectorAll('.copy-code-btn').forEach((btn) => {
@@ -274,15 +313,18 @@ export class App {
         });
       });
 
-      // If blackboard view is open, OR if the prompt is asking to draw/teach/blackboard
-      const isBlackboardIntent = this.blackboardView.isOpen() || /blackboard|draw|diagram|visualiz|sketch|canvas|teach\s+me/i.test(text);
-      if (isBlackboardIntent) {
+      // Automatically launch and render the blackboard plan with Rough.js
+      const isBlackboardIntent = this.blackboardView.isOpen() || /blackboard|draw|diagram|visualiz|sketch|canvas|teach\s+me|what\s+is/i.test(text);
+      if (isBlackboardIntent || result.plan.steps.length > 0) {
         if (!this.blackboardView.isOpen()) {
           this.enterBlackboard();
         }
-        const plan = this.parseResponseToBlackboardPlan(response, text);
-        if (plan.steps.length > 0) {
-          this.blackboardView.open(plan.steps, plan.reasoning, plan.rawJson);
+        if (result.plan.steps.length > 0) {
+          const reasoningPayload = {
+            pedagogy: result.trace.pedagogicalReasoning,
+            spatial_layout: result.trace.spatialBlueprintReasoning,
+          };
+          this.blackboardView.open(result.plan.steps, reasoningPayload, result.plan.rawJson);
         }
       }
 
@@ -290,7 +332,7 @@ export class App {
       this.conversations = loadConversations();
       this.sidebar.renderConversations(this.conversations, this.activeConversationId);
     } catch (err) {
-      console.error('Failed to get AI response:', err);
+      console.error('Multi-layer agent pipeline failed:', err);
       const errText = 'Error: Failed to get response. Please check your API key in Settings.';
       textEl.innerHTML = `<span style="color:var(--danger-color)">${errText}</span>`;
       assistantMsg.content = errText;
