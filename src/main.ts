@@ -274,8 +274,12 @@ export class App {
         });
       });
 
-      // If blackboard view is open, generate interactive blackboard steps from the AI response!
-      if (this.blackboardView.isOpen()) {
+      // If blackboard view is open, OR if the prompt is asking to draw/teach/blackboard
+      const isBlackboardIntent = this.blackboardView.isOpen() || /blackboard|draw|diagram|visualiz|sketch|canvas|teach\s+me/i.test(text);
+      if (isBlackboardIntent) {
+        if (!this.blackboardView.isOpen()) {
+          this.enterBlackboard();
+        }
         const steps = this.parseResponseToBlackboardSteps(response, text);
         if (steps.length > 0) {
           this.blackboardView.open(steps);
@@ -341,14 +345,104 @@ export class App {
   }
 
   private parseResponseToBlackboardSteps(response: string, userPrompt: string): BlackboardStep[] {
-    // 0. Specialized diagram matching for Set Theory / Venn diagrams / Circles
-    const isSetTheory = /set\s*theory|venn|circle|intersection|union|subset/i.test(userPrompt + ' ' + response);
-    if (isSetTheory) {
+    // Clean topic name for display
+    const cleanTopic = userPrompt
+      .replace(/^(?:teach\s+me|explain|what\s+is|how\s+does|draw|show\s+me|visualize)\s+(?:about\s+|what\s+|how\s+)?/i, '')
+      .replace(/[?!.]/g, '')
+      .trim() || 'Concept Overview';
+
+    // 1. Try parsing JSON block if present from AI
+    const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1].trim());
+        const list = Array.isArray(parsed) ? parsed : (parsed.steps || []);
+        if (list.length > 0 && (list[0].title || list[0].explanation)) {
+          return list.map((s: any, idx: number) => {
+            const rawElements: any[] = s.elements || [];
+            const sanitizedElements = rawElements.map((el: any, elIdx: number) => {
+              const type = el.type || 'rect';
+              const color = el.color || (elIdx % 2 === 0 ? '#00d4aa' : '#00f0ff');
+              const strokeWidth = el.strokeWidth || 2;
+              const start = el.start || { x: 180 + elIdx * 120, y: 180 };
+              return {
+                id: el.id || `json_el_${idx}_${elIdx}`,
+                type,
+                color,
+                strokeWidth,
+                start,
+                end: el.end || (type === 'arrow' || type === 'line' ? { x: start.x + 120, y: start.y } : undefined),
+                width: el.width || (type === 'rect' ? 180 : undefined),
+                height: el.height || (type === 'rect' ? 90 : undefined),
+                radius: el.radius || (type === 'circle' ? 65 : undefined),
+                text: el.text || el.label || undefined,
+              };
+            });
+
+            return {
+              step: s.step || idx + 1,
+              title: s.title || `Step ${idx + 1}: ${cleanTopic}`,
+              explanation: s.explanation || s.description || '',
+              elements: sanitizedElements.length > 0 ? sanitizedElements : [
+                { id: `el_${idx}_box`, type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 180, y: 160 }, width: 220, height: 100, text: s.title || cleanTopic },
+                { id: `el_${idx}_arr`, type: 'arrow', color: '#00f0ff', strokeWidth: 2, start: { x: 400, y: 210 }, end: { x: 520, y: 210 } },
+                { id: `el_${idx}_node`, type: 'circle', color: '#7928ca', strokeWidth: 2, start: { x: 600, y: 210 }, radius: 60, text: `State ${idx + 1}` },
+              ],
+            };
+          });
+        }
+      } catch {}
+    }
+
+    // 2. Extract step headings and texts from Markdown
+    const stepRegex = /(?:^|\n)(?:###?\s*(?:Step\s*(\d+)[:.]?|(\d+)[\.:])\s*|\*\*(?:Step\s*(\d+)[:.]?|(\d+)[\.:])\s*)([^\n]+)/gi;
+    const headings: { title: string; body: string }[] = [];
+    const rawMatches: { index: number; title: string }[] = [];
+    let m;
+    while ((m = stepRegex.exec(response)) !== null) {
+      const title = m[5].replace(/\*\*/g, '').trim();
+      rawMatches.push({ index: m.index, title });
+    }
+
+    if (rawMatches.length >= 2) {
+      for (let i = 0; i < rawMatches.length; i++) {
+        const current = rawMatches[i];
+        const nextIndex = i < rawMatches.length - 1 ? rawMatches[i + 1].index : response.length;
+        const bodyText = response.substring(current.index, nextIndex)
+          .replace(/^[^\n]+\n/, '')
+          .replace(/[#*`_]/g, '')
+          .trim();
+        headings.push({ title: current.title, body: bodyText.split('\n')[0] || bodyText });
+      }
+    } else {
+      const cleanParagraphs = response
+        .split('\n\n')
+        .map(p => p.replace(/[#*`_]/g, '').trim())
+        .filter(p => p.length > 20);
+
+      headings.push({
+        title: `1. Foundation: ${cleanTopic.slice(0, 30)}`,
+        body: cleanParagraphs[0] || response.slice(0, 180),
+      });
+      headings.push({
+        title: `2. Mechanism & Execution`,
+        body: cleanParagraphs[1] || response.slice(180, 360) || 'Core process and operational interactions.',
+      });
+      headings.push({
+        title: `3. Definitive Takeaway`,
+        body: cleanParagraphs[2] || 'Key principle and synthesis of the concept.',
+      });
+    }
+
+    const combinedText = (userPrompt + ' ' + response).toLowerCase();
+
+    // 3. Domain Pattern A: Set Theory / Venn Diagrams / Overlapping Groups
+    if (/set\s*theory|venn|circle|intersection|union|subset|disjoint/i.test(combinedText)) {
       return [
         {
           step: 1,
-          title: 'Sets as Collections: Set A & Set B',
-          explanation: 'In set theory, a set is a collection of distinct elements. Here, Circle A represents Set A = {1, 2, 3} and Circle B represents Set B = {3, 4, 5}.',
+          title: headings[0]?.title || 'Sets as Distinct Collections: Set A & Set B',
+          explanation: headings[0]?.body || 'A set is a well-defined collection of distinct elements. Here Set A and Set B represent two discrete collections.',
           elements: [
             { id: 'set_a_circ', type: 'circle', color: '#00d4aa', strokeWidth: 3, start: { x: 340, y: 230 }, radius: 100, text: '{1, 2, 3}' },
             { id: 'set_b_circ', type: 'circle', color: '#7928ca', strokeWidth: 3, start: { x: 540, y: 230 }, radius: 100, text: '{3, 4, 5}' },
@@ -358,8 +452,8 @@ export class App {
         },
         {
           step: 2,
-          title: 'Intersection (A ∩ B): Common Elements',
-          explanation: 'The intersection A ∩ B contains only the elements that belong to BOTH Set A and Set B simultaneously: element {3}.',
+          title: headings[1]?.title || 'Intersection (A ∩ B): Common Overlap',
+          explanation: headings[1]?.body || 'The intersection contains only elements that exist in BOTH sets simultaneously: {3}.',
           elements: [
             { id: 'set_a_overlap', type: 'circle', color: 'rgba(0, 212, 170, 0.85)', strokeWidth: 3, start: { x: 390, y: 230 }, radius: 110 },
             { id: 'set_b_overlap', type: 'circle', color: 'rgba(121, 40, 202, 0.85)', strokeWidth: 3, start: { x: 490, y: 230 }, radius: 110 },
@@ -370,11 +464,10 @@ export class App {
         },
         {
           step: 3,
-          title: 'Union (A ∪ B) & Universal Set U',
-          explanation: 'The union A ∪ B combines all unique elements from both sets: {1, 2, 3, 4, 5}. The outer rectangle represents the Universal Set U.',
+          title: headings[2]?.title || 'Union (A ∪ B) & Universal Set U',
+          explanation: headings[2]?.body || 'The union joins all unique elements from both sets: {1, 2, 3, 4, 5}. The outer boundary is the Universal Set U.',
           elements: [
-            { id: 'univ_box', type: 'rect', color: 'rgba(255, 255, 255, 0.3)', strokeWidth: 2, start: { x: 220, y: 80 }, width: 440, height: 300 },
-            { id: 'univ_label', type: 'text', color: 'rgba(255, 255, 255, 0.6)', strokeWidth: 1, start: { x: 300, y: 110 }, text: 'Universal Set U' },
+            { id: 'univ_box', type: 'rect', color: 'rgba(255, 255, 255, 0.3)', strokeWidth: 2, start: { x: 220, y: 80 }, width: 440, height: 300, text: 'Universal Set U' },
             { id: 'set_a_u', type: 'circle', color: '#00d4aa', strokeWidth: 3, start: { x: 390, y: 240 }, radius: 100 },
             { id: 'set_b_u', type: 'circle', color: '#7928ca', strokeWidth: 3, start: { x: 490, y: 240 }, radius: 100 },
             { id: 'union_card', type: 'text', color: '#00f0ff', strokeWidth: 2, start: { x: 440, y: 350 }, text: 'Union A ∪ B = {1, 2, 3, 4, 5}' },
@@ -383,101 +476,157 @@ export class App {
       ];
     }
 
-    // 1. Try parsing JSON block if present
-    const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[1].trim());
-        const list = Array.isArray(parsed) ? parsed : (parsed.steps || []);
-        if (list.length > 0 && list[0].title) {
-          return list.map((s: any, idx: number) => ({
-            step: s.step || idx + 1,
-            title: s.title || `Step ${idx + 1}`,
-            explanation: s.explanation || s.description || '',
-            elements: s.elements || [
-              { id: `el_${idx}_1`, type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 140, y: 160 }, width: 220, height: 100 },
-              { id: `el_${idx}_2`, type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 360, y: 210 }, end: { x: 500, y: 210 } },
-              { id: `el_${idx}_3`, type: 'rect', color: '#7928ca', strokeWidth: 2, start: { x: 500, y: 160 }, width: 220, height: 100 },
-            ],
-          }));
-        }
-      } catch {}
-    }
-
-    // 2. Try parsing markdown step headings (e.g. ### Step 1: ..., ## 1. ..., **Step 1:**)
-    const stepRegex = /(?:^|\n)(?:###?\s*(?:Step\s*(\d+)[:.]?|(\d+)[\.:])\s*|\*\*(?:Step\s*(\d+)[:.]?|(\d+)[\.:])\s*)([^\n]+)/gi;
-    const matches: { index: number; title: string; stepNum: number }[] = [];
-    let m;
-    while ((m = stepRegex.exec(response)) !== null) {
-      const stepNum = parseInt(m[1] || m[2] || m[3] || m[4] || `${matches.length + 1}`, 10);
-      const title = m[5].replace(/\*\*/g, '').trim();
-      matches.push({ index: m.index, title, stepNum });
-    }
-
-    if (matches.length >= 2) {
-      const parsedSteps: BlackboardStep[] = [];
-      for (let i = 0; i < matches.length; i++) {
-        const current = matches[i];
-        const nextIndex = i < matches.length - 1 ? matches[i + 1].index : response.length;
-        const bodyText = response.substring(current.index, nextIndex)
-          .replace(/^[^\n]+\n/, '')
-          .replace(/[#*`_]/g, '')
-          .trim();
-        const firstSentence = bodyText.split('\n')[0] || bodyText;
-
-        parsedSteps.push({
-          step: i + 1,
-          title: current.title || `Step ${i + 1}`,
-          explanation: firstSentence.slice(0, 200),
+    // 4. Domain Pattern B: Trees / Search / Recursion / Hierarchy / Sorting
+    if (/tree|binary|search|bst|recursion|recursive|sort|heap|graph|traversal|dfs|bfs/i.test(combinedText)) {
+      return [
+        {
+          step: 1,
+          title: headings[0]?.title || `1. Root Node & Initial Target`,
+          explanation: headings[0]?.body || `Beginning traversal at the root node to evaluate the search condition.`,
           elements: [
-            { id: `st_${i}_box1`, type: 'rect', color: i % 2 === 0 ? '#00d4aa' : '#7928ca', strokeWidth: 2, start: { x: 120 + i * 40, y: 160 }, width: 200, height: 100 },
-            { id: `st_${i}_line`, type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 320 + i * 40, y: 210 }, end: { x: 460 + i * 40, y: 210 } },
-            { id: `st_${i}_box2`, type: 'rect', color: '#ffb86c', strokeWidth: 2, start: { x: 460 + i * 40, y: 160 }, width: 180, height: 100 },
+            { id: 'tree_root', type: 'circle', color: '#00d4aa', strokeWidth: 3, start: { x: 440, y: 130 }, radius: 45, text: 'Root: 50' },
+            { id: 'tree_target', type: 'rect', color: '#ffb86c', strokeWidth: 2, start: { x: 180, y: 90 }, width: 140, height: 60, text: 'Target: 25' },
+            { id: 'tree_start_arr', type: 'arrow', color: '#ffb86c', strokeWidth: 2, start: { x: 320, y: 120 }, end: { x: 395, y: 130 } },
           ],
-        });
-      }
-      return parsedSteps;
+        },
+        {
+          step: 2,
+          title: headings[1]?.title || `2. Recursive Branching & Evaluation`,
+          explanation: headings[1]?.body || `Comparing target against current node; navigating the left branch since 25 < 50.`,
+          elements: [
+            { id: 'tree_root_2', type: 'circle', color: '#00d4aa', strokeWidth: 3, start: { x: 440, y: 120 }, radius: 40, text: '50' },
+            { id: 'edge_left', type: 'arrow', color: '#00f0ff', strokeWidth: 3, start: { x: 410, y: 150 }, end: { x: 310, y: 220 } },
+            { id: 'edge_right', type: 'line', color: 'rgba(255,255,255,0.25)', strokeWidth: 2, start: { x: 470, y: 150 }, end: { x: 570, y: 220 } },
+            { id: 'tree_left', type: 'circle', color: '#00f0ff', strokeWidth: 3, start: { x: 290, y: 240 }, radius: 40, text: '25' },
+            { id: 'tree_right', type: 'circle', color: 'rgba(255,255,255,0.3)', strokeWidth: 2, start: { x: 590, y: 240 }, radius: 40, text: '75' },
+            { id: 'decision_badge', type: 'text', color: '#ffb86c', strokeWidth: 2, start: { x: 320, y: 175 }, text: '25 < 50 (Go Left)' },
+          ],
+        },
+        {
+          step: 3,
+          title: headings[2]?.title || `3. Match Reached / Base Case Return`,
+          explanation: headings[2]?.body || `Target found at node 25! Base case return unwinds call stack with O(log n) efficiency.`,
+          elements: [
+            { id: 'tree_root_3', type: 'circle', color: 'rgba(255,255,255,0.4)', strokeWidth: 2, start: { x: 440, y: 120 }, radius: 35, text: '50' },
+            { id: 'edge_found', type: 'arrow', color: '#50fa7b', strokeWidth: 3, start: { x: 410, y: 150 }, end: { x: 310, y: 220 } },
+            { id: 'tree_found', type: 'circle', color: '#50fa7b', strokeWidth: 4, start: { x: 290, y: 240 }, radius: 45, text: 'MATCH: 25' },
+            { id: 'return_card', type: 'rect', color: '#00f0ff', strokeWidth: 2, start: { x: 460, y: 210 }, width: 220, height: 90, text: 'O(log n) Target Resolved' },
+          ],
+        },
+      ];
     }
 
-    // 3. Fallback: Parse paragraphs into 3 clean progressive steps
-    const cleanParagraphs = response
-      .split('\n\n')
-      .map(p => p.replace(/[#*`_]/g, '').trim())
-      .filter(p => p.length > 25);
+    // 5. Domain Pattern C: Systems / Client-Server / Networking / Web
+    if (/server|client|api|database|network|http|cloud|microservice|auth|rest|tcp/i.test(combinedText)) {
+      return [
+        {
+          step: 1,
+          title: headings[0]?.title || '1. Client Request Initiation',
+          explanation: headings[0]?.body || 'Client device originates an HTTPS request towards the API Gateway / Server.',
+          elements: [
+            { id: 'sys_client', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 160, y: 170 }, width: 170, height: 90, text: 'Client App' },
+            { id: 'sys_req_arr', type: 'arrow', color: '#00f0ff', strokeWidth: 2, start: { x: 330, y: 215 }, end: { x: 490, y: 215 } },
+            { id: 'sys_req_text', type: 'text', color: '#ffb86c', strokeWidth: 1, start: { x: 410, y: 195 }, text: 'GET /api/data' },
+            { id: 'sys_server', type: 'rect', color: '#7928ca', strokeWidth: 2, start: { x: 490, y: 170 }, width: 180, height: 90, text: 'API Server' },
+          ],
+        },
+        {
+          step: 2,
+          title: headings[1]?.title || '2. Processing & Database Query',
+          explanation: headings[1]?.body || 'Server authenticates request, executes business logic, and queries the database.',
+          elements: [
+            { id: 'sys_server_2', type: 'rect', color: '#7928ca', strokeWidth: 2, start: { x: 340, y: 170 }, width: 180, height: 90, text: 'API Server' },
+            { id: 'sys_db_arr', type: 'arrow', color: '#ffb86c', strokeWidth: 2, start: { x: 520, y: 215 }, end: { x: 640, y: 215 } },
+            { id: 'sys_db', type: 'circle', color: '#00d4aa', strokeWidth: 3, start: { x: 690, y: 215 }, radius: 55, text: 'Database' },
+            { id: 'sys_auth_badge', type: 'rect', color: '#00f0ff', strokeWidth: 1, start: { x: 340, y: 80 }, width: 180, height: 50, text: 'Auth & Validation' },
+          ],
+        },
+        {
+          step: 3,
+          title: headings[2]?.title || '3. Response Payload & Resolution',
+          explanation: headings[2]?.body || 'Database returns record set; server sends 200 OK JSON payload back to client.',
+          elements: [
+            { id: 'sys_res_client', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 160, y: 170 }, width: 170, height: 90, text: 'Client App' },
+            { id: 'sys_res_arr', type: 'arrow', color: '#50fa7b', strokeWidth: 3, start: { x: 490, y: 215 }, end: { x: 330, y: 215 } },
+            { id: 'sys_res_label', type: 'text', color: '#50fa7b', strokeWidth: 2, start: { x: 410, y: 195 }, text: '200 OK (JSON)' },
+            { id: 'sys_res_server', type: 'rect', color: '#7928ca', strokeWidth: 2, start: { x: 490, y: 170 }, width: 180, height: 90, text: 'API Server' },
+          ],
+        },
+      ];
+    }
 
-    const step1Text = cleanParagraphs[0] || response.slice(0, 180);
-    const step2Text = cleanParagraphs[1] || response.slice(180, 360) || step1Text;
-    const step3Text = cleanParagraphs[2] || 'Key takeaway: concept mastered with step-by-step breakdown.';
+    // 6. Domain Pattern D: Pipelines / Cycles / Science / Machine Learning
+    if (/pipeline|flow|stream|cycle|loop|compiler|train|photo|engine|process|model|learn/i.test(combinedText)) {
+      return [
+        {
+          step: 1,
+          title: headings[0]?.title || '1. Inputs & Primary Ingestion',
+          explanation: headings[0]?.body || `Source data and raw inputs prepared for the transformation stage.`,
+          elements: [
+            { id: 'pipe_in1', type: 'circle', color: '#00d4aa', strokeWidth: 2, start: { x: 200, y: 170 }, radius: 50, text: 'Input A' },
+            { id: 'pipe_in2', type: 'circle', color: '#7928ca', strokeWidth: 2, start: { x: 200, y: 290 }, radius: 50, text: 'Input B' },
+            { id: 'pipe_arr1', type: 'arrow', color: '#00f0ff', strokeWidth: 2, start: { x: 250, y: 170 }, end: { x: 370, y: 210 } },
+            { id: 'pipe_arr2', type: 'arrow', color: '#00f0ff', strokeWidth: 2, start: { x: 250, y: 290 }, end: { x: 370, y: 250 } },
+            { id: 'pipe_stage1', type: 'rect', color: '#ffb86c', strokeWidth: 2, start: { x: 370, y: 190 }, width: 180, height: 80, text: 'Ingestion Engine' },
+          ],
+        },
+        {
+          step: 2,
+          title: headings[1]?.title || '2. Processing & Transformation Stage',
+          explanation: headings[1]?.body || `Core mechanism executes state transitions and continuous processing logic.`,
+          elements: [
+            { id: 'pipe_core', type: 'rect', color: '#00d4aa', strokeWidth: 3, start: { x: 240, y: 170 }, width: 220, height: 110, text: 'Core Processor' },
+            { id: 'pipe_flow', type: 'arrow', color: '#00f0ff', strokeWidth: 3, start: { x: 460, y: 225 }, end: { x: 580, y: 225 } },
+            { id: 'pipe_state', type: 'circle', color: '#ffb86c', strokeWidth: 3, start: { x: 640, y: 225 }, radius: 60, text: 'Transformed' },
+            { id: 'pipe_feedback', type: 'arrow', color: 'rgba(255,255,255,0.4)', strokeWidth: 2, start: { x: 640, y: 165 }, end: { x: 350, y: 120 } },
+            { id: 'pipe_feed_lbl', type: 'text', color: '#a77dff', strokeWidth: 1, start: { x: 490, y: 130 }, text: 'Feedback Loop' },
+          ],
+        },
+        {
+          step: 3,
+          title: headings[2]?.title || '3. Output Synthesis & Delivery',
+          explanation: headings[2]?.body || `Synthesized artifact produced with verified status and high fidelity.`,
+          elements: [
+            { id: 'pipe_out_card', type: 'rect', color: '#50fa7b', strokeWidth: 3, start: { x: 260, y: 160 }, width: 360, height: 120, text: 'Final Validated Output' },
+            { id: 'pipe_badge', type: 'circle', color: '#00f0ff', strokeWidth: 3, start: { x: 440, y: 320 }, radius: 45, text: '100% Ready' },
+          ],
+        },
+      ];
+    }
 
+    // 7. Universal General Fallback for EVERY other prompt
     return [
       {
         step: 1,
-        title: `Core Concept: ${userPrompt.slice(0, 35)}`,
-        explanation: step1Text.slice(0, 220),
+        title: headings[0]?.title || `1. Core Foundation: ${cleanTopic.slice(0, 30)}`,
+        explanation: headings[0]?.body || `Foundational overview of ${cleanTopic} establishing key entities and principles.`,
         elements: [
-          { id: 'bb_1_rect', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 140, y: 160 }, width: 220, height: 110 },
-          { id: 'bb_1_arrow', type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 360, y: 215 }, end: { x: 500, y: 215 } },
-          { id: 'bb_1_box2', type: 'rect', color: '#7928ca', strokeWidth: 2, start: { x: 500, y: 160 }, width: 220, height: 110 },
+          { id: 'gen_subj', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 180, y: 170 }, width: 220, height: 95, text: cleanTopic.slice(0, 24) },
+          { id: 'gen_arr1', type: 'arrow', color: '#00f0ff', strokeWidth: 2, start: { x: 400, y: 217 }, end: { x: 530, y: 217 } },
+          { id: 'gen_entity', type: 'circle', color: '#7928ca', strokeWidth: 3, start: { x: 595, y: 217 }, radius: 65, text: 'Core Entity' },
+          { id: 'gen_init_lbl', type: 'text', color: '#ffb86c', strokeWidth: 1, start: { x: 465, y: 195 }, text: 'Initialize' },
         ],
       },
       {
         step: 2,
-        title: 'Mechanism & Deep Dive',
-        explanation: step2Text.slice(0, 220),
+        title: headings[1]?.title || '2. Mechanism & Dynamic Interactions',
+        explanation: headings[1]?.body || `Examining the functional relationships, internal execution, and interactions.`,
         elements: [
-          { id: 'bb_2_line1', type: 'line', color: '#00f0ff', strokeWidth: 2, start: { x: 250, y: 160 }, end: { x: 430, y: 100 } },
-          { id: 'bb_2_line2', type: 'line', color: '#ffb86c', strokeWidth: 2, start: { x: 430, y: 100 }, end: { x: 610, y: 160 } },
-          { id: 'bb_2_rect', type: 'rect', color: '#ffb86c', strokeWidth: 2, start: { x: 330, y: 70 }, width: 200, height: 70 },
-          { id: 'bb_2_base', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 200, y: 240 }, width: 460, height: 90 },
+          { id: 'gen_box_a', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 160, y: 170 }, width: 170, height: 90, text: 'Component A' },
+          { id: 'gen_arr_mid', type: 'arrow', color: '#00f0ff', strokeWidth: 2, start: { x: 330, y: 215 }, end: { x: 460, y: 215 } },
+          { id: 'gen_core_box', type: 'rect', color: '#ffb86c', strokeWidth: 2, start: { x: 460, y: 170 }, width: 180, height: 90, text: 'Process Core' },
+          { id: 'gen_arr_out', type: 'arrow', color: '#50fa7b', strokeWidth: 2, start: { x: 640, y: 215 }, end: { x: 730, y: 215 } },
+          { id: 'gen_badge', type: 'circle', color: '#7928ca', strokeWidth: 2, start: { x: 770, y: 215 }, radius: 40, text: 'State B' },
         ],
       },
       {
         step: 3,
-        title: 'Definitive Takeaway Card',
-        explanation: step3Text.slice(0, 220),
+        title: headings[2]?.title || '3. Synthesis & Definitive Takeaway',
+        explanation: headings[2]?.body || `Key principle and practical summary synthesized for lasting retention.`,
         elements: [
-          { id: 'bb_3_card', type: 'rect', color: '#00f0ff', strokeWidth: 3, start: { x: 220, y: 140 }, width: 440, height: 160 },
-          { id: 'bb_3_accent', type: 'line', color: '#ffb86c', strokeWidth: 3, start: { x: 220, y: 180 }, end: { x: 660, y: 180 } },
+          { id: 'gen_card', type: 'rect', color: '#00f0ff', strokeWidth: 3, start: { x: 220, y: 150 }, width: 440, height: 130, text: `Key Takeaway: ${cleanTopic.slice(0, 28)}` },
+          { id: 'gen_accent', type: 'line', color: '#ffb86c', strokeWidth: 3, start: { x: 220, y: 200 }, end: { x: 660, y: 200 } },
+          { id: 'gen_verified', type: 'circle', color: '#50fa7b', strokeWidth: 3, start: { x: 440, y: 320 }, radius: 35, text: '✓ Mastered' },
         ],
       },
     ];

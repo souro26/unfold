@@ -153,16 +153,27 @@ export class SkiaRenderer {
       const h = el.height * progress;
       const rect = ck.LTRBRect(el.start.x, el.start.y, el.start.x + w, el.start.y + h);
       skCanvas.drawRect(rect, paint);
+      if (el.text && progress > 0.8) {
+        try {
+          const font = new ck.Font(null, 13);
+          const textPaint = new ck.Paint();
+          textPaint.setStyle(ck.PaintStyle.Fill);
+          textPaint.setColor(color);
+          skCanvas.drawText(el.text, el.start.x + 12, el.start.y + h / 2 + 4, font, textPaint);
+          font.delete();
+          textPaint.delete();
+        } catch {}
+      }
     } else if (el.type === 'circle' && el.start) {
       const radius = (el.radius || (el.width ? el.width / 2 : 60)) * progress;
       skCanvas.drawCircle(el.start.x, el.start.y, radius, paint);
       if (el.text && progress > 0.8) {
         try {
-          const font = new ck.Font(null, 15);
+          const font = new ck.Font(null, 14);
           const textPaint = new ck.Paint();
           textPaint.setStyle(ck.PaintStyle.Fill);
           textPaint.setColor(color);
-          skCanvas.drawText(el.text, el.start.x - 30, el.start.y + 5, font, textPaint);
+          skCanvas.drawText(el.text, el.start.x - 25, el.start.y + 5, font, textPaint);
           font.delete();
           textPaint.delete();
         } catch {}
@@ -187,58 +198,45 @@ export class SkiaRenderer {
     paint.delete();
   }
 
-  private drawSmoothPath(ck: any, skCanvas: any, paint: any, points: Point[], progress: number): void {
+  private drawSmoothPath(_ck: any, skCanvas: any, paint: any, points: Point[], progress: number): void {
     const totalPoints = Math.max(2, Math.floor(points.length * progress));
     const activePoints = points.slice(0, totalPoints);
     if (activePoints.length < 2) return;
 
-    const path = new ck.Path();
-    path.moveTo(activePoints[0].x, activePoints[0].y);
-
-    for (let i = 1; i < activePoints.length - 2; i++) {
-      const p0 = activePoints[i - 1];
-      const p1 = activePoints[i];
-      const p2 = activePoints[i + 1];
-      const p3 = activePoints[i + 2];
-
-      for (let t = 0; t <= 5; t++) {
-        const tt = t / 5;
-        const pt = this.catmullRom(p0, p1, p2, p3, tt);
-        path.lineTo(pt.x, pt.y);
+    try {
+      if (typeof skCanvas.drawLine === 'function') {
+        for (let i = 0; i < activePoints.length - 1; i++) {
+          skCanvas.drawLine(
+            activePoints[i].x,
+            activePoints[i].y,
+            activePoints[i + 1].x,
+            activePoints[i + 1].y,
+            paint
+          );
+        }
       }
-    }
-
-    const last = activePoints[activePoints.length - 1];
-    path.lineTo(last.x, last.y);
-    skCanvas.drawPath(path, paint);
-    path.delete();
+    } catch {}
   }
 
-  private drawArrow(ck: any, skCanvas: any, paint: any, start: Point, end: Point, progress: number): void {
+  private drawArrow(_ck: any, skCanvas: any, paint: any, start: Point, end: Point, progress: number): void {
     const currentX = start.x + (end.x - start.x) * progress;
     const currentY = start.y + (end.y - start.y) * progress;
 
-    const path = new ck.Path();
-    path.moveTo(start.x, start.y);
-    path.lineTo(currentX, currentY);
-
-    if (progress > 0.8) {
-      const angle = Math.atan2(end.y - start.y, end.x - start.x);
-      const headLen = 14;
-      path.moveTo(currentX, currentY);
-      path.lineTo(
-        currentX - headLen * Math.cos(angle - Math.PI / 6),
-        currentY - headLen * Math.sin(angle - Math.PI / 6)
-      );
-      path.moveTo(currentX, currentY);
-      path.lineTo(
-        currentX - headLen * Math.cos(angle + Math.PI / 6),
-        currentY - headLen * Math.sin(angle + Math.PI / 6)
-      );
-    }
-
-    skCanvas.drawPath(path, paint);
-    path.delete();
+    try {
+      if (typeof skCanvas.drawLine === 'function') {
+        skCanvas.drawLine(start.x, start.y, currentX, currentY, paint);
+        if (progress > 0.8) {
+          const angle = Math.atan2(end.y - start.y, end.x - start.x);
+          const headLen = 14;
+          const p1x = currentX - headLen * Math.cos(angle - Math.PI / 6);
+          const p1y = currentY - headLen * Math.sin(angle - Math.PI / 6);
+          const p2x = currentX - headLen * Math.cos(angle + Math.PI / 6);
+          const p2y = currentY - headLen * Math.sin(angle + Math.PI / 6);
+          skCanvas.drawLine(currentX, currentY, p1x, p1y, paint);
+          skCanvas.drawLine(currentX, currentY, p2x, p2y, paint);
+        }
+      }
+    } catch {}
   }
 
   private drawGrid(ck: any, skCanvas: any, width: number, height: number): void {
@@ -273,15 +271,6 @@ export class SkiaRenderer {
     const b = parseInt(clean.slice(4, 6), 16) || 170;
     const a = Math.round(255 * alphaMultiplier);
     return ck.Color(r, g, b, a);
-  }
-
-  private catmullRom(p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point {
-    const t2 = t * t;
-    const t3 = t2 * t;
-    return {
-      x: 0.5 * (2 * p1.x + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
-      y: 0.5 * (2 * p1.y + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
-    };
   }
 
   public destroy(): void {

@@ -560,6 +560,15 @@ export class BlackboardView {
 
         if (el.type === 'rect' && el.start && el.width && el.height) {
           this.ctx.strokeRect(el.start.x, el.start.y, el.width, el.height);
+          if (el.text) {
+            this.ctx.save();
+            this.ctx.fillStyle = el.color || '#ffffff';
+            this.ctx.font = '13px Inter, sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(el.text, el.start.x + el.width / 2, el.start.y + el.height / 2);
+            this.ctx.restore();
+          }
         } else if (el.type === 'circle' && el.start) {
           const radius = el.radius || (el.width ? el.width / 2 : 60);
           this.ctx.beginPath();
