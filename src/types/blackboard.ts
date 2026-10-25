@@ -3,6 +3,9 @@ export type DrawingTool = 'select' | 'pen' | 'line' | 'rect' | 'circle' | 'arrow
 export interface Point {
   x: number;
   y: number;
+  pressure?: number;
+  tiltX?: number;
+  tiltY?: number;
 }
 
 export interface DrawingElement {

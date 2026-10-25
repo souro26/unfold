@@ -1,8 +1,9 @@
-import { BlackboardStep } from '../types';
+import { BlackboardStep, Point, DrawingElement } from '../types';
 import { SpeechService } from '../services/speech';
 import { SkiaRenderer } from '../renderer-skia';
 import { ExportService } from '../services/export';
 import { PluginManager } from '../services/PluginManager';
+import { StylusService, StylusCurveProfile } from '../services/stylus';
 
 export class BlackboardView {
   private overlayEl: HTMLElement;
@@ -40,6 +41,11 @@ export class BlackboardView {
   private isPresentation: boolean = false;
   private playTimer: ReturnType<typeof setTimeout> | null = null;
   private skiaRenderer: SkiaRenderer;
+
+  // Stylus pen drawing & pressure calibration state
+  private stylusService: StylusService = new StylusService();
+  private activeStroke: Point[] | null = null;
+  private isDrawing: boolean = false;
 
   // Advanced gesture recognition state
   private viewport = {
@@ -93,6 +99,7 @@ export class BlackboardView {
     this.skiaRenderer = new SkiaRenderer();
     this.bindEvents();
     this.setupGestureListeners();
+    this.setupStylusListeners();
   }
 
   private bindEvents(): void {
@@ -225,6 +232,132 @@ export class BlackboardView {
     this.canvasEl.addEventListener('dblclick', () => {
       this.resetViewport();
     });
+  }
+
+  private setupStylusListeners(): void {
+    if (!this.canvasEl) return;
+
+    this.canvasEl.style.touchAction = 'none';
+
+    this.canvasEl.addEventListener('pointerdown', (e: PointerEvent) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+      const rect = this.canvasEl.getBoundingClientRect();
+      const rawX = e.clientX - rect.left;
+      const rawY = e.clientY - rect.top;
+      const cx = this.canvasEl.width / 2;
+      const cy = this.canvasEl.height / 2;
+      const pt = this.screenToCanvas(rawX, rawY, cx, cy);
+
+      const pressure = e.pressure !== undefined && e.pressure > 0 ? e.pressure : (e.pointerType === 'pen' ? 0.35 : 0.5);
+      const point: Point = {
+        x: pt.x,
+        y: pt.y,
+        pressure,
+        tiltX: e.tiltX,
+        tiltY: e.tiltY,
+      };
+
+      this.isDrawing = true;
+      this.activeStroke = [point];
+
+      try {
+        if (typeof this.canvasEl.setPointerCapture === 'function') {
+          this.canvasEl.setPointerCapture(e.pointerId);
+        }
+      } catch {}
+    });
+
+    this.canvasEl.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!this.isDrawing || !this.activeStroke) return;
+
+      const rect = this.canvasEl.getBoundingClientRect();
+      const rawX = e.clientX - rect.left;
+      const rawY = e.clientY - rect.top;
+      const cx = this.canvasEl.width / 2;
+      const cy = this.canvasEl.height / 2;
+      const pt = this.screenToCanvas(rawX, rawY, cx, cy);
+
+      const pressure = e.pressure !== undefined && e.pressure > 0 ? e.pressure : (e.pointerType === 'pen' ? 0.35 : 0.5);
+      const point: Point = {
+        x: pt.x,
+        y: pt.y,
+        pressure,
+        tiltX: e.tiltX,
+        tiltY: e.tiltY,
+      };
+
+      this.activeStroke.push(point);
+      this.drawCanvas();
+    });
+
+    const endStroke = (e: PointerEvent) => {
+      if (!this.isDrawing) return;
+      this.isDrawing = false;
+
+      if (this.activeStroke && this.activeStroke.length > 1) {
+        const smoothed = this.stylusService.smoothPoints(this.activeStroke);
+        const newElement: DrawingElement = {
+          id: `pen_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          type: 'pen',
+          color: '#00f0ff',
+          strokeWidth: 3,
+          points: smoothed,
+        };
+
+        if (this.currentSteps.length > 0) {
+          const step = this.currentSteps[this.currentStepIndex];
+          if (!step.elements) step.elements = [];
+          step.elements.push(newElement);
+        }
+      }
+
+      this.activeStroke = null;
+      try {
+        if (typeof this.canvasEl.releasePointerCapture === 'function') {
+          this.canvasEl.releasePointerCapture(e.pointerId);
+        }
+      } catch {}
+      this.drawCanvas();
+    };
+
+    this.canvasEl.addEventListener('pointerup', endStroke);
+    this.canvasEl.addEventListener('pointercancel', endStroke);
+  }
+
+  public screenToCanvas(screenX: number, screenY: number, cx: number, cy: number): { x: number; y: number } {
+    let x = screenX - (cx + this.viewport.panX);
+    let y = screenY - (cy + this.viewport.panY);
+
+    if (this.viewport.rotation !== 0) {
+      const cos = Math.cos(-this.viewport.rotation);
+      const sin = Math.sin(-this.viewport.rotation);
+      const rx = x * cos - y * sin;
+      const ry = x * sin + y * cos;
+      x = rx;
+      y = ry;
+    }
+
+    x = x / this.viewport.zoom + cx;
+    y = y / this.viewport.zoom + cy;
+
+    return { x, y };
+  }
+
+  public getStylusService(): StylusService {
+    return this.stylusService;
+  }
+
+  public setStylusProfile(profile: StylusCurveProfile): void {
+    this.stylusService.setProfile(profile);
+  }
+
+  public isDrawingActive(): boolean {
+    return this.isDrawing;
+  }
+
+  public getActiveStroke(): Point[] | null {
+    return this.activeStroke ? [...this.activeStroke] : null;
   }
 
   public getViewport(): { zoom: number; rotation: number; panX: number; panY: number } {
@@ -387,16 +520,42 @@ export class BlackboardView {
           this.ctx.lineTo(el.end.x, el.end.y);
           this.ctx.stroke();
         } else if (el.type === 'pen' && el.points && el.points.length > 1) {
-          this.ctx.beginPath();
-          this.ctx.moveTo(el.points[0].x, el.points[0].y);
-          for (let i = 1; i < el.points.length; i++) {
-            this.ctx.lineTo(el.points[i].x, el.points[i].y);
+          for (let i = 0; i < el.points.length - 1; i++) {
+            const p1 = el.points[i];
+            const p2 = el.points[i + 1];
+            const metrics = this.stylusService.calculateStrokeMetrics(p1, el.strokeWidth || 3);
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.lineWidth = metrics.width;
+            this.ctx.globalAlpha = metrics.opacity;
+            this.ctx.strokeStyle = el.color || '#00f0ff';
+            this.ctx.moveTo(p1.x, p1.y);
+            this.ctx.lineTo(p2.x, p2.y);
+            this.ctx.stroke();
+            this.ctx.restore();
           }
-          this.ctx.stroke();
         } else {
           PluginManager.getInstance().renderCustomElement(this.ctx, el);
         }
       });
+    }
+
+    // Render active in-progress stylus stroke
+    if (this.ctx && this.activeStroke && this.activeStroke.length > 1) {
+      for (let i = 0; i < this.activeStroke.length - 1; i++) {
+        const p1 = this.activeStroke[i];
+        const p2 = this.activeStroke[i + 1];
+        const metrics = this.stylusService.calculateStrokeMetrics(p1, 3);
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.lineWidth = metrics.width;
+        this.ctx.globalAlpha = metrics.opacity;
+        this.ctx.strokeStyle = '#00f0ff';
+        this.ctx.moveTo(p1.x, p1.y);
+        this.ctx.lineTo(p2.x, p2.y);
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
     }
 
     this.ctx.restore();

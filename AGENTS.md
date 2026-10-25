@@ -188,12 +188,12 @@ unfold/
 - [x] Advanced gesture recognition (pinch-zoom, rotate, pan, reset)
 - [x] Local LLM via llama.cpp sidecar (`nemotron-3-4b-int4` for RTX 4060 8GB)
 - [x] Robust local chat persistence: auto-titling, in-memory fallback, and JSON export/import
-- [x] Comprehensive QA and E2E test suite (58 Vitest tests + 10 Rust unit/integration tests)
+- [x] Hardware stylus pen tilt and pressure calibration curves (soft, firm, calligraphic profiles, Catmull-Rom splines)
+- [x] Packaging & Release: Generated Windows NSIS setup (9.10 MiB) and MSI (11.96 MiB) installers (`npx tauri build`)
+- [x] Comprehensive QA and E2E test suite (64 Vitest tests + 10 Rust unit/integration tests)
 
 ### 📋 Next Steps & Distribution Roadmap (v0.2.0+)
-- [ ] Packaging & Release: Generate signed Windows MSI / NSIS installer (`npm run tauri:build`)
 - [ ] Bundling llama-server executable sidecar into Tauri distribution bundle
-- [ ] Hardware stylus pen tilt and pressure calibration curves
 - [ ] WebGPU compute shaders for dynamic particle simulation in physics visualizations
 
 ## Gotchas / Quirks
