@@ -341,6 +341,48 @@ export class App {
   }
 
   private parseResponseToBlackboardSteps(response: string, userPrompt: string): BlackboardStep[] {
+    // 0. Specialized diagram matching for Set Theory / Venn diagrams / Circles
+    const isSetTheory = /set\s*theory|venn|circle|intersection|union|subset/i.test(userPrompt + ' ' + response);
+    if (isSetTheory) {
+      return [
+        {
+          step: 1,
+          title: 'Sets as Collections: Set A & Set B',
+          explanation: 'In set theory, a set is a collection of distinct elements. Here, Circle A represents Set A = {1, 2, 3} and Circle B represents Set B = {3, 4, 5}.',
+          elements: [
+            { id: 'set_a_circ', type: 'circle', color: '#00d4aa', strokeWidth: 3, start: { x: 340, y: 230 }, radius: 100, text: '{1, 2, 3}' },
+            { id: 'set_b_circ', type: 'circle', color: '#7928ca', strokeWidth: 3, start: { x: 540, y: 230 }, radius: 100, text: '{3, 4, 5}' },
+            { id: 'label_a', type: 'text', color: '#00d4aa', strokeWidth: 1, start: { x: 340, y: 105 }, text: 'Set A' },
+            { id: 'label_b', type: 'text', color: '#a77dff', strokeWidth: 1, start: { x: 540, y: 105 }, text: 'Set B' },
+          ],
+        },
+        {
+          step: 2,
+          title: 'Intersection (A ∩ B): Common Elements',
+          explanation: 'The intersection A ∩ B contains only the elements that belong to BOTH Set A and Set B simultaneously: element {3}.',
+          elements: [
+            { id: 'set_a_overlap', type: 'circle', color: 'rgba(0, 212, 170, 0.85)', strokeWidth: 3, start: { x: 390, y: 230 }, radius: 110 },
+            { id: 'set_b_overlap', type: 'circle', color: 'rgba(121, 40, 202, 0.85)', strokeWidth: 3, start: { x: 490, y: 230 }, radius: 110 },
+            { id: 'intersect_text', type: 'text', color: '#ffb86c', strokeWidth: 2, start: { x: 440, y: 230 }, text: 'A ∩ B = {3}' },
+            { id: 'a_only', type: 'text', color: '#00d4aa', strokeWidth: 1, start: { x: 320, y: 230 }, text: '{1, 2}' },
+            { id: 'b_only', type: 'text', color: '#a77dff', strokeWidth: 1, start: { x: 560, y: 230 }, text: '{4, 5}' },
+          ],
+        },
+        {
+          step: 3,
+          title: 'Union (A ∪ B) & Universal Set U',
+          explanation: 'The union A ∪ B combines all unique elements from both sets: {1, 2, 3, 4, 5}. The outer rectangle represents the Universal Set U.',
+          elements: [
+            { id: 'univ_box', type: 'rect', color: 'rgba(255, 255, 255, 0.3)', strokeWidth: 2, start: { x: 220, y: 80 }, width: 440, height: 300 },
+            { id: 'univ_label', type: 'text', color: 'rgba(255, 255, 255, 0.6)', strokeWidth: 1, start: { x: 300, y: 110 }, text: 'Universal Set U' },
+            { id: 'set_a_u', type: 'circle', color: '#00d4aa', strokeWidth: 3, start: { x: 390, y: 240 }, radius: 100 },
+            { id: 'set_b_u', type: 'circle', color: '#7928ca', strokeWidth: 3, start: { x: 490, y: 240 }, radius: 100 },
+            { id: 'union_card', type: 'text', color: '#00f0ff', strokeWidth: 2, start: { x: 440, y: 350 }, text: 'Union A ∪ B = {1, 2, 3, 4, 5}' },
+          ],
+        },
+      ];
+    }
+
     // 1. Try parsing JSON block if present
     const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonMatch) {

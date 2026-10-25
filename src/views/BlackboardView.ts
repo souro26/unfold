@@ -560,11 +560,45 @@ export class BlackboardView {
 
         if (el.type === 'rect' && el.start && el.width && el.height) {
           this.ctx.strokeRect(el.start.x, el.start.y, el.width, el.height);
+        } else if (el.type === 'circle' && el.start) {
+          const radius = el.radius || (el.width ? el.width / 2 : 60);
+          this.ctx.beginPath();
+          this.ctx.arc(el.start.x, el.start.y, radius, 0, Math.PI * 2);
+          this.ctx.stroke();
+          if (el.text) {
+            this.ctx.save();
+            this.ctx.fillStyle = el.color || '#ffffff';
+            this.ctx.font = '14px Inter, sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(el.text, el.start.x, el.start.y);
+            this.ctx.restore();
+          }
         } else if (el.type === 'line' && el.start && el.end) {
           this.ctx.beginPath();
           this.ctx.moveTo(el.start.x, el.start.y);
           this.ctx.lineTo(el.end.x, el.end.y);
           this.ctx.stroke();
+        } else if (el.type === 'arrow' && el.start && el.end) {
+          this.ctx.beginPath();
+          this.ctx.moveTo(el.start.x, el.start.y);
+          this.ctx.lineTo(el.end.x, el.end.y);
+          this.ctx.stroke();
+          const angle = Math.atan2(el.end.y - el.start.y, el.end.x - el.start.x);
+          const headLen = 12;
+          this.ctx.beginPath();
+          this.ctx.moveTo(el.end.x, el.end.y);
+          this.ctx.lineTo(el.end.x - headLen * Math.cos(angle - Math.PI / 6), el.end.y - headLen * Math.sin(angle - Math.PI / 6));
+          this.ctx.moveTo(el.end.x, el.end.y);
+          this.ctx.lineTo(el.end.x - headLen * Math.cos(angle + Math.PI / 6), el.end.y - headLen * Math.sin(angle + Math.PI / 6));
+          this.ctx.stroke();
+        } else if (el.type === 'text' && el.start && el.text) {
+          this.ctx.save();
+          this.ctx.fillStyle = el.color || '#ffffff';
+          this.ctx.font = '15px Inter, sans-serif';
+          this.ctx.textAlign = 'center';
+          this.ctx.fillText(el.text, el.start.x, el.start.y);
+          this.ctx.restore();
         } else if (el.type === 'pen' && el.points && el.points.length > 1) {
           for (let i = 0; i < el.points.length - 1; i++) {
             const p1 = el.points[i];

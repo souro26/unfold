@@ -86,23 +86,27 @@ export class SkiaRenderer {
   public renderStep(step: BlackboardStep, progress: number = 1.0): void {
     if (!this.surface || !this.canvas || !this.CanvasKit) return;
 
-    const ck = this.CanvasKit;
-    const skCanvas = this.surface.getCanvas();
-    if (!skCanvas) return;
+    try {
+      const ck = this.CanvasKit;
+      const skCanvas = this.surface.getCanvas();
+      if (!skCanvas) return;
 
-    // Clear canvas
-    skCanvas.clear(ck.Color(14, 14, 18, 255));
+      // Clear canvas
+      skCanvas.clear(ck.Color(14, 14, 18, 255));
 
-    // Draw background grid
-    this.drawGrid(ck, skCanvas, this.canvas.width, this.canvas.height);
+      // Draw background grid
+      this.drawGrid(ck, skCanvas, this.canvas.width, this.canvas.height);
 
-    if (step.elements && step.elements.length > 0) {
-      step.elements.forEach((el) => {
-        this.drawElement(ck, skCanvas, el, progress);
-      });
+      if (step.elements && step.elements.length > 0) {
+        step.elements.forEach((el) => {
+          this.drawElement(ck, skCanvas, el, progress);
+        });
+      }
+
+      this.surface.flush();
+    } catch (err) {
+      console.warn('Skia render fallback', err);
     }
-
-    this.surface.flush();
   }
 
   public animateStep(step: BlackboardStep, durationMs: number = 600, onComplete?: () => void): void {
@@ -149,14 +153,26 @@ export class SkiaRenderer {
       const h = el.height * progress;
       const rect = ck.LTRBRect(el.start.x, el.start.y, el.start.x + w, el.start.y + h);
       skCanvas.drawRect(rect, paint);
+    } else if (el.type === 'circle' && el.start) {
+      const radius = (el.radius || (el.width ? el.width / 2 : 60)) * progress;
+      skCanvas.drawCircle(el.start.x, el.start.y, radius, paint);
+      if (el.text && progress > 0.8) {
+        try {
+          const font = new ck.Font(null, 15);
+          const textPaint = new ck.Paint();
+          textPaint.setStyle(ck.PaintStyle.Fill);
+          textPaint.setColor(color);
+          skCanvas.drawText(el.text, el.start.x - 30, el.start.y + 5, font, textPaint);
+          font.delete();
+          textPaint.delete();
+        } catch {}
+      }
     } else if (el.type === 'line' && el.start && el.end) {
-      const currentX = el.start.x + (el.end.x - el.start.x) * progress;
-      const currentY = el.start.y + (el.end.y - el.start.y) * progress;
-      const path = new ck.Path();
-      path.moveTo(el.start.x, el.start.y);
-      path.lineTo(currentX, currentY);
-      skCanvas.drawPath(path, paint);
-      path.delete();
+      if (typeof skCanvas.drawLine === 'function') {
+        const currentX = el.start.x + (el.end.x - el.start.x) * progress;
+        const currentY = el.start.y + (el.end.y - el.start.y) * progress;
+        skCanvas.drawLine(el.start.x, el.start.y, currentX, currentY, paint);
+      }
     } else if (el.type === 'arrow' && el.start && el.end) {
       this.drawArrow(ck, skCanvas, paint, el.start, el.end, progress);
     } else if (el.type === 'pen' && el.points && el.points.length > 1) {
@@ -226,26 +242,25 @@ export class SkiaRenderer {
   }
 
   private drawGrid(ck: any, skCanvas: any, width: number, height: number): void {
-    const gridPaint = new ck.Paint();
-    gridPaint.setColor(ck.Color(255, 255, 255, 12));
-    gridPaint.setStrokeWidth(1);
-    gridPaint.setStyle(ck.PaintStyle.Stroke);
+    try {
+      const gridPaint = new ck.Paint();
+      gridPaint.setColor(ck.Color(255, 255, 255, 12));
+      gridPaint.setStrokeWidth(1);
+      gridPaint.setStyle(ck.PaintStyle.Stroke);
 
-    const step = 40;
-    const path = new ck.Path();
-
-    for (let x = 0; x < width; x += step) {
-      path.moveTo(x, 0);
-      path.lineTo(x, height);
-    }
-    for (let y = 0; y < height; y += step) {
-      path.moveTo(0, y);
-      path.lineTo(width, y);
-    }
-
-    skCanvas.drawPath(path, gridPaint);
-    path.delete();
-    gridPaint.delete();
+      const step = 40;
+      for (let x = 0; x < width; x += step) {
+        if (typeof skCanvas.drawLine === 'function') {
+          skCanvas.drawLine(x, 0, x, height, gridPaint);
+        }
+      }
+      for (let y = 0; y < height; y += step) {
+        if (typeof skCanvas.drawLine === 'function') {
+          skCanvas.drawLine(0, y, width, y, gridPaint);
+        }
+      }
+      gridPaint.delete();
+    } catch {}
   }
 
   private parseColor(ck: any, hex: string, alphaMultiplier: number = 1.0): number {
