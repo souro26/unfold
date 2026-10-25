@@ -108,6 +108,9 @@ export class BlackboardView {
     }
 
     this.skiaRenderer = new SkiaRenderer();
+    this.skiaRenderer.onRenderError = () => {
+      this.drawCanvas2D();
+    };
     this.bindEvents();
     this.setupGestureListeners();
     this.setupStylusListeners();
@@ -529,12 +532,18 @@ export class BlackboardView {
 
   private drawCanvas(): void {
     if (this.currentSteps.length > 0 && this.skiaRenderer.hasSurface()) {
-      const step = this.currentSteps[this.currentStepIndex];
-      this.skiaRenderer.animateStep(step, 500);
-      return;
+      try {
+        const step = this.currentSteps[this.currentStepIndex];
+        this.skiaRenderer.animateStep(step, 500);
+        return;
+      } catch (err) {
+        console.warn('Skia animation failed, falling back to 2D:', err);
+      }
     }
+    this.drawCanvas2D();
+  }
 
-    // High quality 2D canvas fallback
+  public drawCanvas2D(): void {
     if (!this.ctx || !this.canvasEl) return;
     this.ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
 

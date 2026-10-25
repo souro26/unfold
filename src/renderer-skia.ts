@@ -8,6 +8,7 @@ export class SkiaRenderer {
   private canvas: HTMLCanvasElement | null = null;
   private isReady: boolean = false;
   private animationFrameId: number | null = null;
+  public onRenderError?: () => void;
 
   public async init(): Promise<boolean> {
     if (this.isReady && this.CanvasKit) return true;
@@ -99,13 +100,20 @@ export class SkiaRenderer {
 
       if (step.elements && step.elements.length > 0) {
         step.elements.forEach((el) => {
-          this.drawElement(ck, skCanvas, el, progress);
+          try {
+            this.drawElement(ck, skCanvas, el, progress);
+          } catch (elErr) {
+            console.warn('Skia drawElement single error:', elErr);
+          }
         });
       }
 
       this.surface.flush();
     } catch (err) {
-      console.warn('Skia render fallback', err);
+      console.warn('Skia render fallback triggered:', err);
+      try {
+        this.onRenderError?.();
+      } catch {}
     }
   }
 
@@ -141,64 +149,72 @@ export class SkiaRenderer {
     const strokeWidth = el.strokeWidth || 2;
 
     const paint = new ck.Paint();
-    paint.setAntiAlias(true);
-    paint.setColor(color);
-    paint.setStrokeWidth(strokeWidth);
-    paint.setStyle(ck.PaintStyle.Stroke);
-    paint.setStrokeCap(ck.PaintCap.Round);
-    paint.setStrokeJoin(ck.PaintJoin.Round);
+    try {
+      paint.setAntiAlias(true);
+      paint.setColor(color);
+      paint.setStrokeWidth(strokeWidth);
+      paint.setStyle(ck.PaintStyle.Stroke);
+      if (ck.StrokeCap && ck.StrokeCap.Round) {
+        paint.setStrokeCap(ck.StrokeCap.Round);
+      }
+      if (ck.StrokeJoin && ck.StrokeJoin.Round) {
+        paint.setStrokeJoin(ck.StrokeJoin.Round);
+      }
 
-    if (el.type === 'rect' && el.start && el.width && el.height) {
-      const w = el.width * progress;
-      const h = el.height * progress;
-      const rect = ck.LTRBRect(el.start.x, el.start.y, el.start.x + w, el.start.y + h);
-      skCanvas.drawRect(rect, paint);
-      if (el.text && progress > 0.8) {
+      if (el.type === 'rect' && el.start && el.width && el.height) {
+        const w = el.width * progress;
+        const h = el.height * progress;
+        const rect = ck.LTRBRect(el.start.x, el.start.y, el.start.x + w, el.start.y + h);
+        skCanvas.drawRect(rect, paint);
+        if (el.text && progress > 0.8) {
+          try {
+            const font = new ck.Font(null, 13);
+            const textPaint = new ck.Paint();
+            textPaint.setStyle(ck.PaintStyle.Fill);
+            textPaint.setColor(color);
+            skCanvas.drawText(el.text, el.start.x + 12, el.start.y + h / 2 + 4, font, textPaint);
+            font.delete();
+            textPaint.delete();
+          } catch {}
+        }
+      } else if (el.type === 'circle' && el.start) {
+        const radius = (el.radius || (el.width ? el.width / 2 : 60)) * progress;
+        skCanvas.drawCircle(el.start.x, el.start.y, radius, paint);
+        if (el.text && progress > 0.8) {
+          try {
+            const font = new ck.Font(null, 14);
+            const textPaint = new ck.Paint();
+            textPaint.setStyle(ck.PaintStyle.Fill);
+            textPaint.setColor(color);
+            skCanvas.drawText(el.text, el.start.x - 25, el.start.y + 5, font, textPaint);
+            font.delete();
+            textPaint.delete();
+          } catch {}
+        }
+      } else if (el.type === 'line' && el.start && el.end) {
+        if (typeof skCanvas.drawLine === 'function') {
+          const currentX = el.start.x + (el.end.x - el.start.x) * progress;
+          const currentY = el.start.y + (el.end.y - el.start.y) * progress;
+          skCanvas.drawLine(el.start.x, el.start.y, currentX, currentY, paint);
+        }
+      } else if (el.type === 'arrow' && el.start && el.end) {
+        this.drawArrow(skCanvas, paint, el.start, el.end, progress);
+      } else if (el.type === 'pen' && el.points && el.points.length > 1) {
+        this.drawSmoothPath(skCanvas, paint, el.points, progress);
+      } else if (el.type === 'text' && el.start && el.text) {
         try {
-          const font = new ck.Font(null, 13);
-          const textPaint = new ck.Paint();
-          textPaint.setStyle(ck.PaintStyle.Fill);
-          textPaint.setColor(color);
-          skCanvas.drawText(el.text, el.start.x + 12, el.start.y + h / 2 + 4, font, textPaint);
+          const font = new ck.Font(null, 18);
+          paint.setStyle(ck.PaintStyle.Fill);
+          skCanvas.drawText(el.text, el.start.x, el.start.y + 18, font, paint);
           font.delete();
-          textPaint.delete();
         } catch {}
       }
-    } else if (el.type === 'circle' && el.start) {
-      const radius = (el.radius || (el.width ? el.width / 2 : 60)) * progress;
-      skCanvas.drawCircle(el.start.x, el.start.y, radius, paint);
-      if (el.text && progress > 0.8) {
-        try {
-          const font = new ck.Font(null, 14);
-          const textPaint = new ck.Paint();
-          textPaint.setStyle(ck.PaintStyle.Fill);
-          textPaint.setColor(color);
-          skCanvas.drawText(el.text, el.start.x - 25, el.start.y + 5, font, textPaint);
-          font.delete();
-          textPaint.delete();
-        } catch {}
-      }
-    } else if (el.type === 'line' && el.start && el.end) {
-      if (typeof skCanvas.drawLine === 'function') {
-        const currentX = el.start.x + (el.end.x - el.start.x) * progress;
-        const currentY = el.start.y + (el.end.y - el.start.y) * progress;
-        skCanvas.drawLine(el.start.x, el.start.y, currentX, currentY, paint);
-      }
-    } else if (el.type === 'arrow' && el.start && el.end) {
-      this.drawArrow(ck, skCanvas, paint, el.start, el.end, progress);
-    } else if (el.type === 'pen' && el.points && el.points.length > 1) {
-      this.drawSmoothPath(ck, skCanvas, paint, el.points, progress);
-    } else if (el.type === 'text' && el.start && el.text) {
-      const font = new ck.Font(null, 18);
-      paint.setStyle(ck.PaintStyle.Fill);
-      skCanvas.drawText(el.text, el.start.x, el.start.y + 18, font, paint);
-      font.delete();
+    } finally {
+      paint.delete();
     }
-
-    paint.delete();
   }
 
-  private drawSmoothPath(_ck: any, skCanvas: any, paint: any, points: Point[], progress: number): void {
+  private drawSmoothPath(skCanvas: any, paint: any, points: Point[], progress: number): void {
     const totalPoints = Math.max(2, Math.floor(points.length * progress));
     const activePoints = points.slice(0, totalPoints);
     if (activePoints.length < 2) return;
@@ -218,7 +234,7 @@ export class SkiaRenderer {
     } catch {}
   }
 
-  private drawArrow(_ck: any, skCanvas: any, paint: any, start: Point, end: Point, progress: number): void {
+  private drawArrow(skCanvas: any, paint: any, start: Point, end: Point, progress: number): void {
     const currentX = start.x + (end.x - start.x) * progress;
     const currentY = start.y + (end.y - start.y) * progress;
 
