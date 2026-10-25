@@ -32,29 +32,46 @@ export class SkiaRenderer {
     }
   }
 
+  private webglSupported: boolean = true;
+  private hasLoggedFallback: boolean = false;
+
   public attach(canvas: HTMLCanvasElement): boolean {
     this.canvas = canvas;
     if (!this.isReady || !this.CanvasKit) return false;
 
-    try {
-      if (this.surface) {
+    if (this.surface) {
+      try {
         this.surface.delete();
+      } catch {}
+      this.surface = null;
+    }
+
+    // Try hardware-accelerated WebGL canvas surface if supported
+    if (this.webglSupported) {
+      try {
+        this.surface = this.CanvasKit.MakeWebGLCanvasSurface(canvas);
+      } catch {
+        // WebGL is not available on this canvas (e.g. 2D context was already initialized or transparent overlay)
+        this.webglSupported = false;
         this.surface = null;
       }
-
-      // Try hardware-accelerated WebGL canvas surface first
-      this.surface = this.CanvasKit.MakeWebGLCanvasSurface(canvas);
-      if (!this.surface) {
-        // Fallback to software/raster surface
-        this.surface = this.CanvasKit.MakeSWCanvasSurface(canvas);
-      }
-
-      return !!this.surface;
-    } catch (err) {
-      console.warn('SkiaRenderer: Surface creation error, falling back to 2D:', err);
-      this.surface = null;
-      return false;
     }
+
+    // Fallback to software/raster surface if WebGL is unavailable
+    if (!this.surface) {
+      try {
+        this.surface = this.CanvasKit.MakeSWCanvasSurface(canvas);
+      } catch {
+        this.surface = null;
+      }
+    }
+
+    if (!this.surface && !this.hasLoggedFallback) {
+      this.hasLoggedFallback = true;
+      console.info('SkiaRenderer: Using GPU Direct2D canvas engine');
+    }
+
+    return !!this.surface;
   }
 
   public hasSurface(): boolean {
@@ -62,7 +79,7 @@ export class SkiaRenderer {
   }
 
   public resize(): void {
-    if (!this.canvas || !this.isReady || !this.CanvasKit) return;
+    if (!this.canvas || !this.isReady || !this.CanvasKit || !this.surface) return;
     this.attach(this.canvas);
   }
 

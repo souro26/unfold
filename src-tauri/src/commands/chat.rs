@@ -13,13 +13,13 @@ pub struct SendMessageRequest {
     pub image_base64: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ChatCompletionRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
@@ -200,10 +200,10 @@ Keep responses clear, educational, and engaging. Use markdown formatting."#;
         .post(&url)
         .headers({
             let mut header_map = reqwest::header::HeaderMap::new();
-            for (k, v) in headers {
+            for (k, v) in &headers {
                 header_map.insert(
                     reqwest::header::HeaderName::from_bytes(k.as_bytes()).unwrap(),
-                    reqwest::header::HeaderValue::from_str(&v).unwrap(),
+                    reqwest::header::HeaderValue::from_str(v).unwrap(),
                 );
             }
             header_map
@@ -216,6 +216,43 @@ Keep responses clear, educational, and engaging. Use markdown formatting."#;
     let status = response.status();
     if !status.is_success() {
         let error_text = response.text().await.unwrap_or_default();
+
+        // Resilient fallback for hackathon: If primary model throws error on NVIDIA NIM, retry with meta/llama-3.1-8b-instruct
+        if settings.llm_provider == "nvidia" && model != "meta/llama-3.1-8b-instruct" {
+            tracing::warn!("Primary NVIDIA text model {} failed ({}), retrying with meta/llama-3.1-8b-instruct: {}", model, status, error_text);
+            let mut fallback_body = request_body.clone();
+            fallback_body.model = "meta/llama-3.1-8b-instruct".to_string();
+
+            let fallback_res = client
+                .post(&url)
+                .headers({
+                    let mut header_map = reqwest::header::HeaderMap::new();
+                    for (k, v) in &headers {
+                        header_map.insert(
+                            reqwest::header::HeaderName::from_bytes(k.as_bytes()).unwrap(),
+                            reqwest::header::HeaderValue::from_str(&v).unwrap(),
+                        );
+                    }
+                    header_map
+                })
+                .json(&fallback_body)
+                .send()
+                .await;
+
+            if let Ok(f_resp) = fallback_res {
+                if f_resp.status().is_success() {
+                    let chat_response: ChatCompletionResponse = f_resp.json().await
+                        .map_err(|e| format!("Failed to parse response: {}", e))?;
+                    let content = chat_response
+                        .choices
+                        .first()
+                        .map(|c| c.message.content.clone())
+                        .unwrap_or_else(|| "No response generated".to_string());
+                    return Ok(content);
+                }
+            }
+        }
+
         return Err(format!("API error: {} - {}", status, error_text));
     }
 

@@ -425,12 +425,10 @@ export class BlackboardView {
 
     // Attempt hardware-accelerated Skia WASM initialization
     const skiaLoaded = await this.skiaRenderer.init();
-    this.resizeCanvas();
-
     if (skiaLoaded && this.canvasEl) {
       this.skiaRenderer.attach(this.canvasEl);
     }
-
+    this.resizeCanvas();
     this.drawCanvas();
   }
 
@@ -470,8 +468,10 @@ export class BlackboardView {
     this.isPresentation = false;
     this.overlayEl?.classList.remove('presentation-mode');
     this.presentationBtn?.classList.remove('active');
-    this.resizeCanvas();
-    this.renderCurrentStep();
+    if (this.isOpen()) {
+      this.resizeCanvas();
+      this.renderCurrentStep();
+    }
   }
 
   private resizeCanvas(): void {
@@ -709,9 +709,9 @@ export class BlackboardView {
 
   public toggleFullscreen(): void {
     if (!document.fullscreenElement) {
-      this.overlayEl?.requestFullscreen().catch(console.error);
+      this.overlayEl?.requestFullscreen().catch(() => {});
     } else {
-      document.exitFullscreen().catch(console.error);
+      document.exitFullscreen().catch(() => {});
     }
   }
 }
