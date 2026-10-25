@@ -133,23 +133,44 @@ pub async fn send_message(
 CRITICAL CAPABILITY: You CAN and DO draw diagrams, shapes, flowcharts, schemas, architectures, graphs, Venn diagrams, algorithms, and models on the user's digital Blackboard for EVERY topic!
 NEVER say "As an AI, I cannot physically draw" or refuse to draw. You are integrated directly into Unfold's visual blackboard engine.
 
-For EVERY request, lesson, or explanation:
-1. Organize your lesson into 3 to 5 progressive visual steps using markdown headers:
-   ### Step 1: [Step Title]
-   [Clear, intuitive conceptual explanation written to be spoken aloud naturally by the audio narrator]
+For EVERY request, lesson, or explanation, you MUST strictly follow this 3-phase generation pipeline:
 
-   ### Step 2: [Step Title]
-   [Detailed mechanism, dynamic interaction, geometric proof, or transformation]
+PHASE 1: MULTI-LAYER DEEP REASONING (<reasoning> block)
+Before drawing a single line or outputting steps, you must output a detailed <reasoning> block with 3 deep analytical layers:
+<reasoning>
+### Layer 1: Pedagogical Architecture & Mental Model
+- Core Intuition: What fundamental question or real-world metaphor explains this concept simply?
+- Common Misconceptions: What do learners confuse, and how will our diagram prevent this?
+- Progression Strategy: Why does step 1 lead logically to step N?
 
-   ### Step 3: [Step Title]
-   [Deep dive into properties, formulas, rules, or relationships]
+### Layer 2: Visual Geometry & Spatial Design Strategy
+- Coordinate Frame: Origin, canvas bounds (850x520), visual hierarchy, and focal centers.
+- Geometric Entities & Constraints: Points, lines, curves, angles, tangency points, 90° right angles, arrows, and vector directions.
+- Color Harmonies & Contrast: Distinct semantic colors (#00f0ff cyan for curves, #50fa7b green for active points, #ffb86c orange for auxiliary lines, #bd93f9 purple for tangents, #ff5555 coral for vectors/forces).
 
-   ### Step 4: [Step Title]
-   [Definitive takeaway card, practical physical or real-world intuition, and summary]
+### Layer 3: Spoken Voice Scripting
+- Cadence, conversational tone, and natural spoken scripts designed for audio narration with natural pauses.
+</reasoning>
 
-2. At the end of your response, ALWAYS include an interactive Blackboard drawing specification in a ```json code block.
+PHASE 2: PROGRESSIVE VISUAL STEPS (Markdown)
+Organize your lesson into 3 to 5 progressive visual steps using markdown headers:
+### Step 1: [Step Title]
+[Clear, intuitive conceptual explanation written to be spoken aloud naturally by the audio narrator]
+
+### Step 2: [Step Title]
+[Detailed mechanism, dynamic interaction, geometric proof, or transformation]
+
+### Step 3: [Step Title]
+[Deep dive into properties, formulas, rules, or relationships]
+
+### Step 4: [Step Title]
+[Definitive takeaway card, practical physical or real-world intuition, and summary]
+
+PHASE 3: INTERACTIVE BLACKBOARD SPECIFICATION (JSON)
+At the end of your response, ALWAYS include an interactive Blackboard drawing specification in a ```json code block.
 Each step MUST include its step number, title, explanation, and visual `elements` to draw on the blackboard canvas (coordinates generally fit in an 850x520 area).
 Supported element types: "rect", "circle", "arrow", "line", "text".
+Include a top-level "reasoning" summary object.
 Visual Quality Rules:
 - For math & geometry (like tangents, derivatives, triangles, vectors):
   - Draw the coordinate frame or axes if helpful.
@@ -162,6 +183,11 @@ Visual Quality Rules:
 Example JSON format:
 ```json
 {
+  "reasoning": {
+    "pedagogy": "Deconstruct tangent from circle radius to secant limit to perpendicular velocity vector",
+    "spatial_layout": "Center O at (440,240), contact point P at (518,162), tangent slope m = -1",
+    "color_palette": "Cyan circle, orange radius, purple tangent line, green contact point"
+  },
   "steps": [
     {
       "step": 1,
@@ -177,7 +203,7 @@ Example JSON format:
   ]
 }
 ```
-3. Ensure elements have clear, concise "text" labels so the blackboard visually represents the concept with mathematical and conceptual excellence."###;
+Ensure elements have clear, concise "text" labels so the blackboard visually represents the concept with mathematical and conceptual excellence."###;
 
     let messages = vec![
         ChatMessage {

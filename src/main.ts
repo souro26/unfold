@@ -280,9 +280,9 @@ export class App {
         if (!this.blackboardView.isOpen()) {
           this.enterBlackboard();
         }
-        const steps = this.parseResponseToBlackboardSteps(response, text);
-        if (steps.length > 0) {
-          this.blackboardView.open(steps);
+        const plan = this.parseResponseToBlackboardPlan(response, text);
+        if (plan.steps.length > 0) {
+          this.blackboardView.open(plan.steps, plan.reasoning, plan.rawJson);
         }
       }
 
@@ -344,7 +344,22 @@ export class App {
     this.composer.focus();
   }
 
-  private parseResponseToBlackboardSteps(response: string, userPrompt: string): BlackboardStep[] {
+  public parseResponseToBlackboardSteps(response: string, userPrompt: string): BlackboardStep[] {
+    return this.parseResponseToBlackboardPlan(response, userPrompt).steps;
+  }
+
+  private parseResponseToBlackboardPlan(response: string, userPrompt: string): { steps: BlackboardStep[]; reasoning?: any; rawJson?: string } {
+    // 0. Extract explicit <reasoning> or <thought> if emitted by LLM
+    let extractedReasoning: any = null;
+    const reasoningMatch = response.match(/<(?:reasoning|thought)>([\s\S]*?)<\/(?:reasoning|thought)>/i);
+    if (reasoningMatch) {
+      const rawThought = reasoningMatch[1].trim();
+      extractedReasoning = {
+        pedagogicalStrategy: rawThought,
+        spatialArchitecture: 'LLM Multi-Layer CoT Reasoning Spec',
+      };
+    }
+
     // Clean topic name for display
     const cleanTopic = userPrompt
       .replace(/^(?:teach\s+me|explain|what\s+is|how\s+does|draw|show\s+me|visualize)\s+(?:about\s+|what\s+|how\s+)?/i, '')
@@ -355,10 +370,11 @@ export class App {
     const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonMatch) {
       try {
-        const parsed = JSON.parse(jsonMatch[1].trim());
+        const rawJsonString = jsonMatch[1].trim();
+        const parsed = JSON.parse(rawJsonString);
         const list = Array.isArray(parsed) ? parsed : (parsed.steps || []);
         if (list.length > 0 && (list[0].title || list[0].explanation)) {
-          return list.map((s: any, idx: number) => {
+          const steps: BlackboardStep[] = list.map((s: any, idx: number) => {
             const rawElements: any[] = s.elements || [];
             const sanitizedElements = rawElements.map((el: any, elIdx: number) => {
               const type = el.type || 'rect';
@@ -390,6 +406,9 @@ export class App {
               ],
             };
           });
+
+          const reasoning = parsed.reasoning || extractedReasoning;
+          return { steps, reasoning, rawJson: rawJsonString };
         }
       } catch {}
     }
@@ -438,7 +457,7 @@ export class App {
 
     // 3. Domain Pattern A: Tangent Line, Curves & Circle Geometry
     if (/tangent|secant|point\s*of\s*tangenc|radius\s*tangent|tangent\s*line/i.test(combinedText)) {
-      return [
+      const tangentSteps: BlackboardStep[] = [
         {
           step: 1,
           title: 'Circle, Center O, and Point of Tangency P',
@@ -530,11 +549,25 @@ export class App {
           ],
         },
       ];
+      const tangentReasoning = {
+        pedagogicalStrategy: "Deconstruct the tangent line conceptually from foundational geometry to calculus limits and instantaneous physics.\n\n• Step 1: Establish the circular coordinate frame, center O(0,0), radius r, and point of tangency P(x₀, y₀).\n• Step 2: Introduce the secant line intersecting at P and Q, demonstrating the limiting process as Δx → 0 and Q → P.\n• Step 3: Reveal the true tangent line touching strictly at P, highlighting the fundamental theorem of 90° perpendicularity (T ⊥ OP).\n• Step 4: Physical intuition with instantaneous velocity vector v directed along the tangent and centripetal force Fc directed toward center O.",
+        spatialArchitecture: "Canvas 850×520 bounding area:\n• Coordinate origin & axes: x-axis y=260, y-axis x=480.\n• Main circle: Center (480, 260), radius r=120px (Cyan #00f0ff).\n• Point of tangency P: (565, 175) (Emerald #50fa7b).\n• Radius vector OP: (480, 260) to (565, 175) (Orange #ffb86c).\n• Secant line: Passing through P(565, 175) and Q(596, 229).\n• Tangent line: Linear slope m = -1 through P with dual arrowheads (Purple #00d4aa).\n• Right angle: Exact 90° square marker at P aligned between radius and tangent.\n• Particle velocity: Mass dot at P with instantaneous velocity vector v pointing along tangent line (Coral #ff5555).",
+        mentalModel: "A tangent is the linear approximation of a curve at a single point, representing instantaneous rate of change.",
+      };
+      return { steps: tangentSteps, reasoning: tangentReasoning, rawJson: JSON.stringify({ reasoning: tangentReasoning, steps: tangentSteps }, null, 2) };
     }
+
+    let finalSteps: BlackboardStep[] = [];
+    let domainReasoning: any = null;
 
     // 4. Domain Pattern B: Set Theory / Venn Diagrams / Overlapping Groups
     if (/set\s*theory|venn|intersection|union|subset|disjoint/i.test(combinedText)) {
-      return [
+      domainReasoning = {
+        pedagogicalStrategy: "Set Theory pedagogy begins with discrete boundaries, then explores relational overlap (intersection), and culminates in the complete universe (union).\n\n• Step 1: Separate sets A and B with discrete elements.\n• Step 2: Overlapping intersection (A ∩ B) isolating shared members.\n• Step 3: Global union (A ∪ B) inside Universal Set U.",
+        spatialArchitecture: "Dual intersecting circles: Center A at (390, 230), Center B at (490, 230), radius 110px. Universal bounding rectangle (220, 80) 440×300px.",
+        mentalModel: "Sets are mathematical containers; Venn diagrams turn logical operations into spatial geometry.",
+      };
+      finalSteps = [
         {
           step: 1,
           title: headings[0]?.title || 'Sets as Distinct Collections: Set A & Set B',
@@ -570,11 +603,17 @@ export class App {
           ],
         },
       ];
+      return { steps: finalSteps, reasoning: domainReasoning, rawJson: JSON.stringify({ reasoning: domainReasoning, steps: finalSteps }, null, 2) };
     }
 
     // 5. Domain Pattern C: Trees / Search / Recursion / Hierarchy / Sorting
     if (/tree|binary|search|bst|recursion|recursive|sort|heap|graph|traversal|dfs|bfs/i.test(combinedText)) {
-      return [
+      domainReasoning = {
+        pedagogicalStrategy: "Hierarchical data structures are best taught through recursive descent: starting at the root, applying branching decisions, and returning base case resolutions.\n\n• Step 1: Examine root node and compare search key against target.\n• Step 2: Branch navigation (left vs right subtree based on ordering invariant).\n• Step 3: Base case match and stack unwinding.",
+        spatialArchitecture: "Root node at (440, 120), left child at (290, 240), right child at (590, 240). Directed arrows with decision annotations.",
+        mentalModel: "Trees partition a search space logarithmically at each decision node.",
+      };
+      finalSteps = [
         {
           step: 1,
           title: headings[0]?.title || `1. Root Node & Initial Target`,
@@ -610,11 +649,17 @@ export class App {
           ],
         },
       ];
+      return { steps: finalSteps, reasoning: domainReasoning, rawJson: JSON.stringify({ reasoning: domainReasoning, steps: finalSteps }, null, 2) };
     }
 
     // 6. Domain Pattern D: Systems / Client-Server / Networking / Web
     if (/server|client|api|database|network|http|cloud|microservice|auth|rest|tcp/i.test(combinedText)) {
-      return [
+      domainReasoning = {
+        pedagogicalStrategy: "Distributed systems are deconstructed through request-response lifecycles and architectural boundaries.\n\n• Step 1: Client egress with HTTP protocol metadata.\n• Step 2: Server ingress, business logic validation, and database tier querying.\n• Step 3: Response payload serialization and client terminal resolution.",
+        spatialArchitecture: "Three-tier topology: Client (160, 170), Server (490, 170), Database (690, 215). Bidirectional request and response vectors.",
+        mentalModel: "Network architectures isolate concerns between presentation, compute, and persistence layers.",
+      };
+      finalSteps = [
         {
           step: 1,
           title: headings[0]?.title || '1. Client Request Initiation',
@@ -649,11 +694,17 @@ export class App {
           ],
         },
       ];
+      return { steps: finalSteps, reasoning: domainReasoning, rawJson: JSON.stringify({ reasoning: domainReasoning, steps: finalSteps }, null, 2) };
     }
 
     // 7. Domain Pattern E: Pipelines / Cycles / Science / Machine Learning
     if (/pipeline|flow|stream|cycle|loop|compiler|train|photo|engine|process|model|learn/i.test(combinedText)) {
-      return [
+      domainReasoning = {
+        pedagogicalStrategy: "Sequential transformation pipelines deconstruct inputs, state mutations, feedback loops, and output validation.\n\n• Step 1: Ingestion and multi-stream intake.\n• Step 2: Core processing engine with feedback convergence.\n• Step 3: Verified output delivery.",
+        spatialArchitecture: "Pipeline stage boxes spanning left to right from (200, 200) to (640, 225) with closed feedback loops.",
+        mentalModel: "Pipelines transform data continuously through chained invariant stages.",
+      };
+      finalSteps = [
         {
           step: 1,
           title: headings[0]?.title || '1. Inputs & Primary Ingestion',
@@ -688,10 +739,16 @@ export class App {
           ],
         },
       ];
+      return { steps: finalSteps, reasoning: domainReasoning, rawJson: JSON.stringify({ reasoning: domainReasoning, steps: finalSteps }, null, 2) };
     }
 
     // 8. Universal General Fallback for EVERY other prompt
-    return [
+    domainReasoning = {
+      pedagogicalStrategy: `Pedagogical deconstruction of ${cleanTopic}:\n\n• Step 1: Establish primary entities and foundational principles.\n• Step 2: Unpack dynamic interactions, state transitions, and mechanisms.\n• Step 3: Synthesize definitive takeaways and practical mental models.`,
+      spatialArchitecture: "Canvas layout organized into source entity, transformation core, and destination state with clear directional arrows.",
+      mentalModel: `Conceptual breakdown of ${cleanTopic} into progressive interactive stages.`,
+    };
+    finalSteps = [
       {
         step: 1,
         title: headings[0]?.title || `1. Core Foundation: ${cleanTopic.slice(0, 30)}`,
@@ -726,6 +783,7 @@ export class App {
         ],
       },
     ];
+    return { steps: finalSteps, reasoning: domainReasoning, rawJson: JSON.stringify({ reasoning: domainReasoning, steps: finalSteps }, null, 2) };
   }
 
   public async toggleClickThrough(): Promise<void> {

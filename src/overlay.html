@@ -219,6 +219,14 @@
           </svg>
           <span>AI Agent</span>
         </button>
+        <button class="viz-btn viz-inspect-btn" id="vizInspectBtn" title="Inspect Deep Reasoning, Blueprint & Canvas Coordinates">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+            <path d="M12 12L2.5 7.5" />
+            <path d="M12 12v10" />
+          </svg>
+          <span>Blueprint & Reasoning 🧠</span>
+        </button>
         <button class="viz-btn" id="vizPresentation" aria-label="Presentation Mode" title="Presentation Mode (F5)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -259,6 +267,47 @@
       <div class="viz-canvas-container">
         <canvas id="vizCanvas"></canvas>
       </div>
+
+      <!-- Blueprint & Reasoning Inspector Drawer -->
+      <aside class="viz-inspect-drawer hidden" id="vizInspectDrawer" aria-label="Blackboard Blueprint and Deep Reasoning">
+        <div class="inspect-drawer-header">
+          <div class="inspect-drawer-title">
+            <span class="inspect-brain-icon">🧠</span>
+            <span>Reasoning & Canvas Blueprint</span>
+          </div>
+          <button class="inspect-close-btn" id="vizInspectCloseBtn" title="Close Drawer">✕</button>
+        </div>
+        <div class="inspect-drawer-tabs">
+          <button class="inspect-tab-btn active" id="inspectTabReasoningBtn" data-tab="reasoning">Deep Reasoning</button>
+          <button class="inspect-tab-btn" id="inspectTabElementsBtn" data-tab="elements">Step Elements (<span id="inspectElemCount">0</span>)</button>
+          <button class="inspect-tab-btn" id="inspectTabRawBtn" data-tab="raw">Raw Spec / JSON</button>
+        </div>
+        <div class="inspect-drawer-content">
+          <!-- Pane 1: Deep Reasoning -->
+          <div class="inspect-pane active" id="inspectPaneReasoning">
+            <div class="inspect-section-title">🧠 Pedagogical Strategy & Mental Model</div>
+            <div class="inspect-reasoning-body" id="inspectReasoningPedagogy"></div>
+            <div class="inspect-section-title">📐 Visual Geometry & Coordinate Architecture</div>
+            <div class="inspect-reasoning-body" id="inspectReasoningSpatial"></div>
+          </div>
+          <!-- Pane 2: Elements Table -->
+          <div class="inspect-pane" id="inspectPaneElements">
+            <div class="inspect-elements-header">
+              <span>Current Step Elements</span>
+              <span class="inspect-step-name" id="inspectCurrentStepTitle"></span>
+            </div>
+            <div class="inspect-elements-list" id="inspectElementsList"></div>
+          </div>
+          <!-- Pane 3: Raw JSON / Spec -->
+          <div class="inspect-pane" id="inspectPaneRaw">
+            <div class="inspect-raw-bar">
+              <span>Full Generated JSON Blueprint</span>
+              <button class="inspect-copy-code-btn" id="inspectCopyJsonBtn">Copy JSON</button>
+            </div>
+            <pre class="inspect-raw-code" id="inspectRawJsonText"></pre>
+          </div>
+        </div>
+      </aside>
     </div>
     <div class="viz-controls">
       <div class="viz-step-info">
@@ -292,6 +341,13 @@
         </svg>
       </button>
       <div class="hud-divider"></div>
+      <button class="hud-btn" id="hudInspect" title="Blueprint & Reasoning (I)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+          <path d="M12 12L2.5 7.5" />
+          <path d="M12 12v10" />
+        </svg>
+      </button>
       <button class="hud-btn" id="hudExit" title="Exit Presentation (Esc)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18" />

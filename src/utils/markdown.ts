@@ -4,12 +4,62 @@ import katex from 'katex';
 export function renderMarkdown(content: string): string {
   if (!content) return '';
 
+  // 0. Extract reasoning / thinking blocks (<reasoning>...</reasoning> or <thought>...</thought>)
+  const reasoningBlocks: string[] = [];
+  let processed = content.replace(/<(?:reasoning|thought)>([\s\S]*?)<\/(?:reasoning|thought)>/gi, (_, inner) => {
+    const renderedInner = renderMarkdownInner(inner.trim());
+    reasoningBlocks.push(`
+      <details class="reasoning-block" open>
+        <summary class="reasoning-summary">
+          <div class="reasoning-summary-left">
+            <span class="reasoning-icon">🧠</span>
+            <span class="reasoning-title">Deep Reasoning & Visual Blueprint</span>
+          </div>
+          <span class="reasoning-badge">Pedagogical · Spatial Layout · Math</span>
+        </summary>
+        <div class="reasoning-content">
+          ${renderedInner}
+        </div>
+      </details>
+    `);
+    return `###REASONING_BLOCK_${reasoningBlocks.length - 1}###`;
+  });
+
+  return renderMarkdownInner(processed, reasoningBlocks);
+}
+
+function renderMarkdownInner(content: string, reasoningBlocks: string[] = []): string {
+  if (!content) return '';
+
   // 1. Process fenced code blocks first so inner content is not modified
   const codeBlocks: string[] = [];
   let processed = content.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
     const safeLang = escapeHtml(lang || 'text');
     const safeCode = escapeHtml(code.trim());
+
+    let blueprintSummary = '';
+    if ((lang === 'json' || !lang) && code.includes('"steps"')) {
+      try {
+        const parsed = JSON.parse(code.trim());
+        const steps = Array.isArray(parsed) ? parsed : (parsed.steps || []);
+        if (steps.length > 0) {
+          let totalElements = 0;
+          steps.forEach((s: any) => { if (s.elements) totalElements += s.elements.length; });
+          blueprintSummary = `
+            <div class="blueprint-summary-banner">
+              <div class="blueprint-banner-left">
+                <span class="blueprint-banner-icon">📐</span>
+                <span class="blueprint-banner-title">Blackboard Blueprint Architecture</span>
+              </div>
+              <span class="blueprint-banner-stats">${steps.length} Steps · ${totalElements} Canvas Elements</span>
+            </div>
+          `;
+        }
+      } catch {}
+    }
+
     codeBlocks.push(`
+      ${blueprintSummary}
       <div class="code-block-wrapper">
         <div class="code-block-header">
           <span class="code-lang">${safeLang}</span>
@@ -65,6 +115,11 @@ export function renderMarkdown(content: string): string {
   // 9. Restore code blocks
   processed = processed.replace(/###CODE_BLOCK_(\d+)###/g, (_, index) => {
     return codeBlocks[parseInt(index, 10)] || '';
+  });
+
+  // 10. Restore reasoning blocks
+  processed = processed.replace(/###REASONING_BLOCK_(\d+)###/g, (_, index) => {
+    return reasoningBlocks[parseInt(index, 10)] || '';
   });
 
   return processed;

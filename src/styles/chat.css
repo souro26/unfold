@@ -265,6 +265,129 @@
   color: #e4e4e7;
 }
 
+/* ── Deep Reasoning & Thinking Block ──────────────────────────── */
+.reasoning-block {
+  background: rgba(22, 22, 28, 0.7);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-left: 3px solid #8b5cf6;
+  border-radius: 10px;
+  margin: 14px 0;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.reasoning-block:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.12);
+}
+
+.reasoning-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(30, 27, 45, 0.6);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #d8b4fe;
+  list-style: none;
+}
+
+.reasoning-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reasoning-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reasoning-icon {
+  font-size: 16px;
+  animation: pulseBrain 2s infinite ease-in-out;
+}
+
+@keyframes pulseBrain {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+.reasoning-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.reasoning-content {
+  padding: 14px 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e2e8f0;
+  border-top: 1px solid rgba(139, 92, 246, 0.15);
+  background: rgba(15, 15, 20, 0.5);
+}
+
+.reasoning-content h3, .reasoning-content h4 {
+  color: #a78bfa;
+  margin: 10px 0 6px 0;
+  font-size: 13px;
+}
+
+.reasoning-content ul {
+  padding-left: 18px;
+  margin: 6px 0;
+}
+
+.reasoning-content li {
+  margin-bottom: 4px;
+  color: #cbd5e1;
+}
+
+/* ── Blueprint Summary Banner ─────────────────────────────────── */
+.blueprint-summary-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(0, 212, 170, 0.1);
+  border: 1px solid rgba(0, 212, 170, 0.25);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+}
+
+.blueprint-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.blueprint-banner-icon {
+  color: var(--accent-color, #00d4aa);
+}
+
+.blueprint-banner-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.blueprint-banner-stats {
+  font-size: 11px;
+  color: var(--accent-color, #00d4aa);
+  font-weight: 500;
+  background: rgba(0, 212, 170, 0.15);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
 /* Streaming indicator */
 .streaming-indicator {
   display: flex;

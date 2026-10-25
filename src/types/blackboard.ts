@@ -22,6 +22,14 @@ export interface DrawingElement {
   radius?: number;
 }
 
+export interface DeepReasoningMetadata {
+  pedagogicalStrategy?: string;
+  spatialArchitecture?: string;
+  mentalModel?: string;
+  colorPalette?: string;
+  rawJson?: string;
+}
+
 export interface BlackboardStep {
   step: number;
   title: string;
@@ -29,4 +37,5 @@ export interface BlackboardStep {
   code?: string;
   takeaway?: string;
   elements?: DrawingElement[];
+  reasoning?: DeepReasoningMetadata | string;
 }

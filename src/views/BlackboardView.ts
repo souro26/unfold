@@ -42,6 +42,29 @@ export class BlackboardView {
   private hudPlayBtn: HTMLButtonElement;
   private hudExitBtn: HTMLButtonElement;
   private hudStepBadge: HTMLElement;
+  private hudInspectBtn: HTMLButtonElement | null = null;
+
+  // Inspector elements
+  private inspectBtn: HTMLButtonElement | null = null;
+  private inspectDrawer: HTMLElement | null = null;
+  private inspectCloseBtn: HTMLButtonElement | null = null;
+  private inspectTabReasoningBtn: HTMLButtonElement | null = null;
+  private inspectTabElementsBtn: HTMLButtonElement | null = null;
+  private inspectTabRawBtn: HTMLButtonElement | null = null;
+  private inspectPaneReasoning: HTMLElement | null = null;
+  private inspectPaneElements: HTMLElement | null = null;
+  private inspectPaneRaw: HTMLElement | null = null;
+  private inspectReasoningPedagogy: HTMLElement | null = null;
+  private inspectReasoningSpatial: HTMLElement | null = null;
+  private inspectElemCount: HTMLElement | null = null;
+  private inspectCurrentStepTitle: HTMLElement | null = null;
+  private inspectElementsList: HTMLElement | null = null;
+  private inspectRawJsonText: HTMLElement | null = null;
+  private inspectCopyJsonBtn: HTMLButtonElement | null = null;
+
+  // Reasoning & raw blueprint cache
+  private currentReasoning?: any;
+  private currentRawJson?: string;
 
   private currentSteps: BlackboardStep[] = [];
   private currentStepIndex: number = 0;
@@ -102,6 +125,25 @@ export class BlackboardView {
     this.hudPlayBtn = document.getElementById('hudPlay') as HTMLButtonElement;
     this.hudExitBtn = document.getElementById('hudExit') as HTMLButtonElement;
     this.hudStepBadge = document.getElementById('hudStepBadge') as HTMLElement;
+    this.hudInspectBtn = document.getElementById('hudInspect') as HTMLButtonElement | null;
+
+    // Inspector elements
+    this.inspectBtn = document.getElementById('vizInspectBtn') as HTMLButtonElement | null;
+    this.inspectDrawer = document.getElementById('vizInspectDrawer');
+    this.inspectCloseBtn = document.getElementById('vizInspectCloseBtn') as HTMLButtonElement | null;
+    this.inspectTabReasoningBtn = document.getElementById('inspectTabReasoningBtn') as HTMLButtonElement | null;
+    this.inspectTabElementsBtn = document.getElementById('inspectTabElementsBtn') as HTMLButtonElement | null;
+    this.inspectTabRawBtn = document.getElementById('inspectTabRawBtn') as HTMLButtonElement | null;
+    this.inspectPaneReasoning = document.getElementById('inspectPaneReasoning');
+    this.inspectPaneElements = document.getElementById('inspectPaneElements');
+    this.inspectPaneRaw = document.getElementById('inspectPaneRaw');
+    this.inspectReasoningPedagogy = document.getElementById('inspectReasoningPedagogy');
+    this.inspectReasoningSpatial = document.getElementById('inspectReasoningSpatial');
+    this.inspectElemCount = document.getElementById('inspectElemCount');
+    this.inspectCurrentStepTitle = document.getElementById('inspectCurrentStepTitle');
+    this.inspectElementsList = document.getElementById('inspectElementsList');
+    this.inspectRawJsonText = document.getElementById('inspectRawJsonText');
+    this.inspectCopyJsonBtn = document.getElementById('inspectCopyJsonBtn') as HTMLButtonElement | null;
 
     if (this.canvasEl) {
       this.ctx = this.canvasEl.getContext('2d');
@@ -162,7 +204,27 @@ export class BlackboardView {
     this.hudPrevBtn?.addEventListener('click', () => this.prevStep());
     this.hudNextBtn?.addEventListener('click', () => this.nextStep());
     this.hudPlayBtn?.addEventListener('click', () => this.toggleAutoplay());
+    this.hudInspectBtn?.addEventListener('click', () => this.toggleInspectDrawer());
     this.hudExitBtn?.addEventListener('click', () => this.exitPresentationMode());
+
+    // Blueprint & Reasoning Inspector events
+    this.inspectBtn?.addEventListener('click', () => this.toggleInspectDrawer());
+    this.inspectCloseBtn?.addEventListener('click', () => this.closeInspectDrawer());
+    this.inspectTabReasoningBtn?.addEventListener('click', () => this.switchInspectTab('reasoning'));
+    this.inspectTabElementsBtn?.addEventListener('click', () => this.switchInspectTab('elements'));
+    this.inspectTabRawBtn?.addEventListener('click', () => this.switchInspectTab('raw'));
+    this.inspectCopyJsonBtn?.addEventListener('click', () => {
+      const code = this.inspectRawJsonText?.textContent || '';
+      if (code) {
+        navigator.clipboard.writeText(code);
+        if (this.inspectCopyJsonBtn) {
+          this.inspectCopyJsonBtn.textContent = 'Copied!';
+          setTimeout(() => {
+            if (this.inspectCopyJsonBtn) this.inspectCopyJsonBtn.textContent = 'Copy JSON';
+          }, 2000);
+        }
+      }
+    });
 
     window.addEventListener('resize', () => {
       if (this.isOpen()) this.resizeCanvas();
@@ -175,6 +237,13 @@ export class BlackboardView {
       if (e.key === 'F5') {
         e.preventDefault();
         this.togglePresentationMode();
+        return;
+      }
+
+      // 'i' or 'I' toggles the inspector drawer when not in text input
+      if ((e.key === 'i' || e.key === 'I') && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        e.preventDefault();
+        this.toggleInspectDrawer();
         return;
       }
 
@@ -429,9 +498,11 @@ export class BlackboardView {
     this.drawCanvas();
   }
 
-  public async open(steps: BlackboardStep[]): Promise<void> {
+  public async open(steps: BlackboardStep[], reasoning?: any, rawJson?: string): Promise<void> {
     this.currentSteps = steps;
     this.currentStepIndex = 0;
+    this.currentReasoning = reasoning;
+    this.currentRawJson = rawJson;
     this.overlayEl?.classList.add('visible');
     this.renderCurrentStep();
 
@@ -453,6 +524,7 @@ export class BlackboardView {
     this.stopAutoplay();
     SpeechService.stop();
     this.exitPresentationMode();
+    this.closeInspectDrawer();
     this.skiaRenderer.destroy();
     this.overlayEl?.classList.remove('visible');
   }
@@ -532,6 +604,7 @@ export class BlackboardView {
     if (this.hudNextBtn) this.hudNextBtn.disabled = isLast;
 
     PluginManager.getInstance().notifyStepRender(step);
+    this.updateInspectDrawer();
     this.drawCanvas();
   }
 
@@ -839,6 +912,123 @@ export class BlackboardView {
       this.overlayEl?.requestFullscreen().catch(() => {});
     } else {
       document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  // ── Blueprint & Reasoning Inspector Methods ───────────────────
+  public toggleInspectDrawer(): void {
+    if (this.inspectDrawer?.classList.contains('hidden')) {
+      this.openInspectDrawer();
+    } else {
+      this.closeInspectDrawer();
+    }
+  }
+
+  public openInspectDrawer(): void {
+    this.inspectDrawer?.classList.remove('hidden');
+    this.inspectBtn?.classList.add('active');
+    this.updateInspectDrawer();
+  }
+
+  public closeInspectDrawer(): void {
+    this.inspectDrawer?.classList.add('hidden');
+    this.inspectBtn?.classList.remove('active');
+  }
+
+  public switchInspectTab(tab: 'reasoning' | 'elements' | 'raw'): void {
+    this.inspectTabReasoningBtn?.classList.toggle('active', tab === 'reasoning');
+    this.inspectTabElementsBtn?.classList.toggle('active', tab === 'elements');
+    this.inspectTabRawBtn?.classList.toggle('active', tab === 'raw');
+
+    this.inspectPaneReasoning?.classList.toggle('active', tab === 'reasoning');
+    this.inspectPaneElements?.classList.toggle('active', tab === 'elements');
+    this.inspectPaneRaw?.classList.toggle('active', tab === 'raw');
+  }
+
+  public updateInspectDrawer(): void {
+    if (!this.inspectDrawer || this.inspectDrawer.classList.contains('hidden')) return;
+
+    const currentStep = this.currentSteps[this.currentStepIndex];
+
+    // 1. Update Reasoning Pane
+    let pedagogyText = '';
+    let spatialText = '';
+
+    if (this.currentReasoning) {
+      if (typeof this.currentReasoning === 'object') {
+        pedagogyText = this.currentReasoning.pedagogicalStrategy || this.currentReasoning.pedagogy || this.currentReasoning.mentalModel || '';
+        spatialText = this.currentReasoning.spatialArchitecture || this.currentReasoning.spatial_layout || '';
+      } else if (typeof this.currentReasoning === 'string') {
+        pedagogyText = this.currentReasoning;
+      }
+    }
+
+    if (!pedagogyText && currentStep) {
+      pedagogyText = `Target Concept: ${currentStep.title}\n\n• Core Mental Model: Visualizing the step-by-step evolution of ${currentStep.title} with explicit semantic primitives.\n• Pedagogical Strategy: Step ${this.currentStepIndex + 1} of ${this.currentSteps.length} isolates key interactions before introducing secondary properties.\n• Spoken Explanation Script: "${currentStep.explanation}"`;
+    }
+
+    if (!spatialText && currentStep) {
+      spatialText = `• Coordinate Frame: Canvas viewport scaled to fit 850x520 bounding area.\n• Visual Primitives: ${currentStep.elements?.length || 0} distinct vector elements on current slide.\n• Focus Center: Balanced geometry centered around (480, 260) with high-contrast color highlights.`;
+    }
+
+    if (this.inspectReasoningPedagogy) {
+      this.inspectReasoningPedagogy.textContent = pedagogyText || 'No pedagogical metadata available.';
+    }
+    if (this.inspectReasoningSpatial) {
+      this.inspectReasoningSpatial.textContent = spatialText || 'No spatial layout metadata available.';
+    }
+
+    // 2. Update Elements Pane
+    const elements = currentStep?.elements || [];
+    if (this.inspectElemCount) {
+      this.inspectElemCount.textContent = `${elements.length}`;
+    }
+    if (this.inspectCurrentStepTitle) {
+      this.inspectCurrentStepTitle.textContent = currentStep ? `Step ${this.currentStepIndex + 1}: ${currentStep.title}` : 'No active step';
+    }
+
+    if (this.inspectElementsList) {
+      if (elements.length === 0) {
+        this.inspectElementsList.innerHTML = `<div style="font-size:12px;color:#888;padding:12px 0;">No visual elements on this step.</div>`;
+      } else {
+        this.inspectElementsList.innerHTML = elements.map((el, i) => {
+          let coords = '';
+          if (el.start) coords += `start: (${Math.round(el.start.x)}, ${Math.round(el.start.y)})`;
+          if (el.end) coords += ` → end: (${Math.round(el.end.x)}, ${Math.round(el.end.y)})`;
+          if (el.radius) coords += ` | r: ${Math.round(el.radius)}px`;
+          if (el.width && el.height) coords += ` | ${Math.round(el.width)}×${Math.round(el.height)}px`;
+          if (el.text) coords += ` | text: "${el.text}"`;
+
+          return `
+            <div class="inspect-element-card">
+              <div class="inspect-element-top">
+                <span class="inspect-element-type">${i + 1}. ${el.type}</span>
+                <span class="inspect-element-color">
+                  <span class="inspect-color-swatch" style="background:${el.color};"></span>
+                  ${el.color}
+                </span>
+              </div>
+              <div class="inspect-element-coords">${coords}</div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // 3. Update Raw JSON Pane
+    if (this.inspectRawJsonText) {
+      if (this.currentRawJson) {
+        this.inspectRawJsonText.textContent = this.currentRawJson;
+      } else {
+        const payload = {
+          reasoning: this.currentReasoning || {
+            pedagogicalStrategy: pedagogyText,
+            spatialArchitecture: spatialText,
+          },
+          steps: this.currentSteps,
+        };
+        this.inspectRawJsonText.textContent = JSON.stringify(payload, null, 2);
+      }
     }
   }
 }
