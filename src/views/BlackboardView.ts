@@ -442,6 +442,11 @@ export class BlackboardView {
     }
     this.resizeCanvas();
     this.drawCanvas();
+
+    // Automatically begin playback with speech narration
+    if (steps.length > 0) {
+      this.startAutoplay();
+    }
   }
 
   public close(): void {
@@ -685,6 +690,9 @@ export class BlackboardView {
     if (this.currentStepIndex < this.currentSteps.length - 1) {
       this.currentStepIndex++;
       this.renderCurrentStep();
+      if (this.isPlaying) {
+        this.playCurrentStepWithNarration();
+      }
     } else {
       this.stopAutoplay();
     }
@@ -694,6 +702,9 @@ export class BlackboardView {
     if (this.currentStepIndex > 0) {
       this.currentStepIndex--;
       this.renderCurrentStep();
+      if (this.isPlaying) {
+        this.playCurrentStepWithNarration();
+      }
     }
   }
 
@@ -701,6 +712,10 @@ export class BlackboardView {
     if (this.isPlaying) {
       this.stopAutoplay();
     } else {
+      if (this.currentStepIndex >= this.currentSteps.length - 1) {
+        this.currentStepIndex = 0;
+        this.renderCurrentStep();
+      }
       this.startAutoplay();
     }
   }
@@ -708,51 +723,91 @@ export class BlackboardView {
   private startAutoplay(): void {
     this.isPlaying = true;
     if (this.stepPlayBtn) this.stepPlayBtn.textContent = 'Pause';
-    this.playNextLoop();
-  }
-
-  private playNextLoop(): void {
-    if (!this.isPlaying) return;
-    this.playTimer = setTimeout(() => {
-      if (this.currentStepIndex < this.currentSteps.length - 1) {
-        this.nextStep();
-        this.playNextLoop();
-      } else {
-        this.stopAutoplay();
-      }
-    }, 3500);
+    this.updateHudPlayIcon(true);
+    this.playCurrentStepWithNarration();
   }
 
   private stopAutoplay(): void {
     this.isPlaying = false;
-    if (this.playTimer) clearTimeout(this.playTimer);
+    if (this.playTimer) {
+      clearTimeout(this.playTimer);
+      this.playTimer = null;
+    }
+    SpeechService.stop();
     if (this.stepPlayBtn) this.stepPlayBtn.textContent = 'Autoplay';
+    if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
+    this.updateHudPlayIcon(false);
   }
 
-  public narrateCurrentStep(): void {
+  private updateHudPlayIcon(isPlaying: boolean): void {
+    const icon = document.getElementById('hudPlayIcon');
+    if (icon) {
+      if (isPlaying) {
+        icon.innerHTML = '<rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/>';
+      } else {
+        icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>';
+      }
+    }
+  }
+
+  private playCurrentStepWithNarration(): void {
+    if (!this.isPlaying || this.currentSteps.length === 0) return;
     const step = this.currentSteps[this.currentStepIndex];
     if (!step) return;
 
-    if (SpeechService.isSpeaking()) {
-      SpeechService.stop();
-      if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
-      return;
+    if (this.playTimer) {
+      clearTimeout(this.playTimer);
+      this.playTimer = null;
     }
 
     if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Speaking...';
 
-    SpeechService.speak(`${step.title}. ${step.explanation}`, {
-      rate: 1.0,
+    // Set fallback safety timer (advances if speech completes or if TTS is unavailable/mocked)
+    this.playTimer = setTimeout(() => {
+      if (!this.isPlaying) return;
+      if (this.currentStepIndex < this.currentSteps.length - 1) {
+        this.currentStepIndex++;
+        this.renderCurrentStep();
+        this.playCurrentStepWithNarration();
+      } else {
+        this.stopAutoplay();
+      }
+    }, 3500);
+
+    const textToSpeak = `${step.title}. ${step.explanation}`;
+
+    SpeechService.speak(textToSpeak, {
+      rate: 1.05,
+      onStart: () => {
+        if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Speaking...';
+      },
       onEnd: () => {
         if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
-        if (this.isPlaying && this.currentStepIndex < this.currentSteps.length - 1) {
-          setTimeout(() => this.nextStep(), 800);
-        }
+        if (!this.isPlaying) return;
+        if (this.playTimer) clearTimeout(this.playTimer);
+        this.playTimer = setTimeout(() => {
+          if (!this.isPlaying) return;
+          if (this.currentStepIndex < this.currentSteps.length - 1) {
+            this.currentStepIndex++;
+            this.renderCurrentStep();
+            this.playCurrentStepWithNarration();
+          } else {
+            this.stopAutoplay();
+          }
+        }, 850);
       },
       onError: () => {
         if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
       },
     });
+  }
+
+  public narrateCurrentStep(): void {
+    if (this.isPlaying) {
+      this.stopAutoplay();
+    } else {
+      this.startAutoplay();
+    }
   }
 
   public exportDiagram(format: 'mermaid' | 'excalidraw' | 'plantuml' | 'manim' | string): void {

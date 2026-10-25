@@ -436,8 +436,104 @@ export class App {
 
     const combinedText = (userPrompt + ' ' + response).toLowerCase();
 
-    // 3. Domain Pattern A: Set Theory / Venn Diagrams / Overlapping Groups
-    if (/set\s*theory|venn|circle|intersection|union|subset|disjoint/i.test(combinedText)) {
+    // 3. Domain Pattern A: Tangent Line, Curves & Circle Geometry
+    if (/tangent|secant|point\s*of\s*tangenc|radius\s*tangent|tangent\s*line/i.test(combinedText)) {
+      return [
+        {
+          step: 1,
+          title: 'Circle, Center O, and Point of Tangency P',
+          explanation: 'A tangent describes the exact instantaneous direction of a curve at a single point. Here is a circle with center O(0,0) and radius r, with point of tangency P chosen on the perimeter.',
+          elements: [
+            // Coordinate Axes
+            { id: 'tan_axis_x', type: 'line', color: 'rgba(255, 255, 255, 0.25)', strokeWidth: 1, start: { x: 220, y: 260 }, end: { x: 740, y: 260 } },
+            { id: 'tan_axis_y', type: 'line', color: 'rgba(255, 255, 255, 0.25)', strokeWidth: 1, start: { x: 480, y: 70 }, end: { x: 480, y: 440 } },
+            { id: 'tan_lbl_x', type: 'text', color: 'rgba(255, 255, 255, 0.6)', strokeWidth: 1, start: { x: 755, y: 265 }, text: 'X' },
+            { id: 'tan_lbl_y', type: 'text', color: 'rgba(255, 255, 255, 0.6)', strokeWidth: 1, start: { x: 480, y: 55 }, text: 'Y' },
+            // The Circle
+            { id: 'tan_circle', type: 'circle', color: '#00f0ff', strokeWidth: 3, start: { x: 480, y: 260 }, radius: 120 },
+            // Center O
+            { id: 'tan_center', type: 'circle', color: '#ffb86c', strokeWidth: 3, start: { x: 480, y: 260 }, radius: 6 },
+            { id: 'tan_center_lbl', type: 'text', color: '#ffb86c', strokeWidth: 1, start: { x: 435, y: 285 }, text: 'Center O(0,0)' },
+            // Radius line OP
+            { id: 'tan_radius', type: 'line', color: '#ffb86c', strokeWidth: 2, start: { x: 480, y: 260 }, end: { x: 565, y: 175 } },
+            { id: 'tan_rad_lbl', type: 'text', color: '#ffb86c', strokeWidth: 1, start: { x: 510, y: 230 }, text: 'Radius r' },
+            // Point of Tangency P
+            { id: 'tan_pt_p', type: 'circle', color: '#50fa7b', strokeWidth: 4, start: { x: 565, y: 175 }, radius: 8 },
+            { id: 'tan_pt_lbl', type: 'text', color: '#50fa7b', strokeWidth: 2, start: { x: 675, y: 165 }, text: 'Point of Tangency P(x₀, y₀)' },
+            // Definition Card
+            { id: 'tan_eq_card', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 190, y: 85 }, width: 230, height: 50, text: 'Circle: x² + y² = r²' },
+          ],
+        },
+        {
+          step: 2,
+          title: 'Secant Line vs. Tangent Line (The Calculus Limit As Δx → 0)',
+          explanation: 'A secant line slices through TWO points, P and Q. In calculus, as point Q moves along the circumference closer to P (Δx → 0), the secant line rotates, converging precisely into the tangent line.',
+          elements: [
+            // Coordinate frame & Circle
+            { id: 'tan_axis_x2', type: 'line', color: 'rgba(255, 255, 255, 0.15)', strokeWidth: 1, start: { x: 220, y: 260 }, end: { x: 740, y: 260 } },
+            { id: 'tan_axis_y2', type: 'line', color: 'rgba(255, 255, 255, 0.15)', strokeWidth: 1, start: { x: 480, y: 70 }, end: { x: 480, y: 440 } },
+            { id: 'tan_circle2', type: 'circle', color: 'rgba(0, 240, 255, 0.5)', strokeWidth: 2, start: { x: 480, y: 260 }, radius: 120 },
+            // Point P and Point Q
+            { id: 'tan_pt_p2', type: 'circle', color: '#50fa7b', strokeWidth: 4, start: { x: 565, y: 175 }, radius: 8 },
+            { id: 'tan_pt_q', type: 'circle', color: '#a77dff', strokeWidth: 3, start: { x: 596, y: 229 }, radius: 7 },
+            { id: 'tan_lbl_q', type: 'text', color: '#a77dff', strokeWidth: 1, start: { x: 650, y: 235 }, text: 'Point Q(x₁, y₁)' },
+            // Secant line cutting through P and Q
+            { id: 'tan_secant', type: 'line', color: '#a77dff', strokeWidth: 2, start: { x: 520, y: 95 }, end: { x: 650, y: 325 } },
+            { id: 'tan_sec_lbl', type: 'text', color: '#a77dff', strokeWidth: 1, start: { x: 705, y: 335 }, text: 'Secant Line (Crosses P & Q)' },
+            // Limit convergence arrow Q -> P
+            { id: 'tan_limit_arr', type: 'arrow', color: '#ffb86c', strokeWidth: 2, start: { x: 605, y: 220 }, end: { x: 578, y: 185 } },
+            { id: 'tan_limit_lbl', type: 'text', color: '#ffb86c', strokeWidth: 1, start: { x: 690, y: 195 }, text: 'Limit: Q → P (Δx → 0)' },
+            // Derivative Definition Card
+            { id: 'tan_calc_card', type: 'rect', color: '#00f0ff', strokeWidth: 2, start: { x: 190, y: 85 }, width: 250, height: 50, text: 'Slope m = lim(Δx→0) Δy/Δx' },
+          ],
+        },
+        {
+          step: 3,
+          title: 'The Tangent Line: Strictly Perpendicular (90° to Radius)',
+          explanation: 'The fundamental theorem: The tangent line touches the circle at EXACTLY ONE point and is strictly perpendicular (90° right angle) to the radius OP at point P.',
+          elements: [
+            // Circle & Radius
+            { id: 'tan_circle3', type: 'circle', color: '#00f0ff', strokeWidth: 3, start: { x: 480, y: 260 }, radius: 120 },
+            { id: 'tan_radius3', type: 'line', color: '#ffb86c', strokeWidth: 3, start: { x: 480, y: 260 }, end: { x: 565, y: 175 } },
+            // Tangent Line T with dual arrows
+            { id: 'tan_line_t', type: 'line', color: '#00d4aa', strokeWidth: 4, start: { x: 425, y: 35 }, end: { x: 705, y: 315 } },
+            { id: 'tan_arr_up', type: 'arrow', color: '#00d4aa', strokeWidth: 4, start: { x: 565, y: 175 }, end: { x: 425, y: 35 } },
+            { id: 'tan_arr_dn', type: 'arrow', color: '#00d4aa', strokeWidth: 4, start: { x: 565, y: 175 }, end: { x: 705, y: 315 } },
+            { id: 'tan_pt_p3', type: 'circle', color: '#50fa7b', strokeWidth: 4, start: { x: 565, y: 175 }, radius: 8 },
+            // 90° Perpendicular Square Marker
+            { id: 'tan_sq_1', type: 'line', color: '#ffb86c', strokeWidth: 2, start: { x: 555, y: 185 }, end: { x: 545, y: 175 } },
+            { id: 'tan_sq_2', type: 'line', color: '#ffb86c', strokeWidth: 2, start: { x: 545, y: 175 }, end: { x: 555, y: 165 } },
+            { id: 'tan_90_lbl', type: 'text', color: '#ffb86c', strokeWidth: 2, start: { x: 450, y: 155 }, text: '90° (Tangent ⟂ Radius)' },
+            // Theorem badge
+            { id: 'tan_t_badge', type: 'rect', color: '#00d4aa', strokeWidth: 2, start: { x: 180, y: 85 }, width: 280, height: 50, text: 'Tangent: Touches at 1 Point' },
+          ],
+        },
+        {
+          step: 4,
+          title: 'Physics & Real-World Meaning: Instantaneous Velocity',
+          explanation: 'In physics, if an object whirls in a circle and is released, it flies off along the tangent—the direction of instantaneous velocity. In calculus, the tangent slope is the instantaneous rate of change.',
+          elements: [
+            // Circular Orbit
+            { id: 'tan_orbit', type: 'circle', color: 'rgba(0, 240, 255, 0.35)', strokeWidth: 2, start: { x: 480, y: 260 }, radius: 120 },
+            // Orbiting particle P
+            { id: 'tan_particle', type: 'circle', color: '#ff5555', strokeWidth: 4, start: { x: 565, y: 175 }, radius: 10, text: 'm' },
+            // Instantaneous Velocity Vector
+            { id: 'tan_vel_arr', type: 'arrow', color: '#50fa7b', strokeWidth: 4, start: { x: 565, y: 175 }, end: { x: 390, y: 0 } },
+            { id: 'tan_vel_lbl', type: 'text', color: '#50fa7b', strokeWidth: 2, start: { x: 360, y: 35 }, text: 'Velocity Vector v⃗ (Instantaneous)' },
+            // Centripetal acceleration
+            { id: 'tan_acc_arr', type: 'arrow', color: '#ffb86c', strokeWidth: 3, start: { x: 565, y: 175 }, end: { x: 505, y: 235 } },
+            { id: 'tan_acc_lbl', type: 'text', color: '#ffb86c', strokeWidth: 1, start: { x: 565, y: 250 }, text: 'Centripetal Force F_c' },
+            // Derivative Formula Card
+            { id: 'tan_deriv_card', type: 'rect', color: '#00f0ff', strokeWidth: 2, start: { x: 170, y: 340 }, width: 280, height: 60, text: 'Calculus: dy/dx = f\'(x₀)' },
+            // Takeaway Card
+            { id: 'tan_takeaway', type: 'rect', color: '#7928ca', strokeWidth: 3, start: { x: 480, y: 330 }, width: 420, height: 80, text: 'Takeaway: Tangent = Instantaneous Direction' },
+          ],
+        },
+      ];
+    }
+
+    // 4. Domain Pattern B: Set Theory / Venn Diagrams / Overlapping Groups
+    if (/set\s*theory|venn|intersection|union|subset|disjoint/i.test(combinedText)) {
       return [
         {
           step: 1,
@@ -476,7 +572,7 @@ export class App {
       ];
     }
 
-    // 4. Domain Pattern B: Trees / Search / Recursion / Hierarchy / Sorting
+    // 5. Domain Pattern C: Trees / Search / Recursion / Hierarchy / Sorting
     if (/tree|binary|search|bst|recursion|recursive|sort|heap|graph|traversal|dfs|bfs/i.test(combinedText)) {
       return [
         {
@@ -516,7 +612,7 @@ export class App {
       ];
     }
 
-    // 5. Domain Pattern C: Systems / Client-Server / Networking / Web
+    // 6. Domain Pattern D: Systems / Client-Server / Networking / Web
     if (/server|client|api|database|network|http|cloud|microservice|auth|rest|tcp/i.test(combinedText)) {
       return [
         {
@@ -555,7 +651,7 @@ export class App {
       ];
     }
 
-    // 6. Domain Pattern D: Pipelines / Cycles / Science / Machine Learning
+    // 7. Domain Pattern E: Pipelines / Cycles / Science / Machine Learning
     if (/pipeline|flow|stream|cycle|loop|compiler|train|photo|engine|process|model|learn/i.test(combinedText)) {
       return [
         {
@@ -594,7 +690,7 @@ export class App {
       ];
     }
 
-    // 7. Universal General Fallback for EVERY other prompt
+    // 8. Universal General Fallback for EVERY other prompt
     return [
       {
         step: 1,

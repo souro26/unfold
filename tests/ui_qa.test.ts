@@ -322,7 +322,7 @@ describe('End-to-End UI & QA Test Suite', () => {
       ];
       await bbView.open(steps);
 
-      bbView.toggleAutoplay();
+      // Automatically starts playing on open with narration
       expect(document.getElementById('stepPlay')?.textContent).toBe('Pause');
 
       // Fast forward
