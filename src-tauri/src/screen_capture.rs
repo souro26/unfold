@@ -475,6 +475,7 @@ pub struct UsageInfo {
 
 pub async fn call_vision_api(request: VisionRequest) -> Result<VisionResponse, String> {
     match request.provider.as_str() {
+        "nvidia" => call_nvidia_vision(request).await,
         "openrouter" => call_openrouter_vision(request).await,
         "openai" => call_openai_vision(request).await,
         "gemini" => call_gemini_vision(request).await,
@@ -702,6 +703,124 @@ async fn call_openai_vision(request: VisionRequest) -> Result<VisionResponse, St
         content,
         model: request.model,
         provider: "openai".to_string(),
+        usage: resp.usage.map(|u| UsageInfo {
+            prompt_tokens: Some(u.prompt_tokens),
+            completion_tokens: Some(u.completion_tokens),
+            total_tokens: Some(u.total_tokens),
+        }),
+    })
+}
+
+async fn call_nvidia_vision(request: VisionRequest) -> Result<VisionResponse, String> {
+    let api_key = request.api_key.ok_or("NVIDIA API key required (get free key at build.nvidia.com)")?;
+
+    #[derive(serde::Serialize)]
+    struct NvidiaRequest {
+        model: String,
+        messages: Vec<NvidiaMessage>,
+        temperature: f32,
+        max_tokens: u32,
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct NvidiaMessage {
+        role: String,
+        content: serde_json::Value,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct NvidiaResponse {
+        choices: Vec<NvidiaChoice>,
+        usage: Option<NvidiaUsage>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct NvidiaChoice {
+        message: NvidiaMessage,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct NvidiaUsage {
+        prompt_tokens: u32,
+        completion_tokens: u32,
+        total_tokens: u32,
+    }
+
+    let mut content = vec![
+        serde_json::json!({"type": "text", "text": request.prompt}),
+    ];
+
+    if !request.image_base64.is_empty() {
+        content.push(serde_json::json!({
+            "type": "image_url",
+            "image_url": {
+                "url": format!("data:image/png;base64,{}", request.image_base64)
+            }
+        }));
+    }
+
+    let messages = vec![
+        NvidiaMessage {
+            role: "system".to_string(),
+            content: serde_json::json!([{"type": "text", "text": "You are Unfold, an AI teaching assistant. Explain what you see in the image clearly and educationally."}]),
+        },
+        NvidiaMessage {
+            role: "user".to_string(),
+            content: serde_json::json!(content),
+        },
+    ];
+
+    let model = if request.model.is_empty() || request.model.contains("gemini") {
+        "meta/llama-3.2-11b-vision-instruct".to_string()
+    } else {
+        request.model.clone()
+    };
+
+    let body = NvidiaRequest {
+        model: model.clone(),
+        messages,
+        temperature: 0.7,
+        max_tokens: 4096,
+    };
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post("https://integrate.api.nvidia.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("NVIDIA vision request failed: {}", e))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error = response.text().await.unwrap_or_default();
+        return Err(format!("NVIDIA API error: {} - {}", status, error));
+    }
+
+    let resp: NvidiaResponse = response.json().await
+        .map_err(|e| format!("Failed to parse NVIDIA response: {}", e))?;
+
+    let content = resp.choices.first()
+        .map(|c| {
+            match &c.message.content {
+                serde_json::Value::Array(arr) => {
+                    arr.iter()
+                        .filter_map(|v| v.get("text").and_then(|t| t.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("")
+                }
+                serde_json::Value::String(s) => s.clone(),
+                _ => "No response".to_string(),
+            }
+        })
+        .unwrap_or_else(|| "No response generated".to_string());
+
+    Ok(VisionResponse {
+        content,
+        model,
+        provider: "nvidia".to_string(),
         usage: resp.usage.map(|u| UsageInfo {
             prompt_tokens: Some(u.prompt_tokens),
             completion_tokens: Some(u.completion_tokens),

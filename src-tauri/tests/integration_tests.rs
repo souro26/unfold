@@ -9,8 +9,8 @@ fn test_integration_settings_workflow() {
     // Verify initial default settings
     {
         let settings = app_state.settings.read().unwrap();
-        assert_eq!(settings.llm_provider, "gemini");
-        assert_eq!(settings.model, "gemini-1.5-flash");
+        assert_eq!(settings.llm_provider, "nvidia");
+        assert_eq!(settings.model, "meta/llama-3.3-70b-instruct");
         assert!(settings.screen_capture_permission);
     }
 

@@ -152,6 +152,12 @@ Keep responses clear, educational, and engaging. Use markdown formatting."#;
     };
 
     let (url, headers) = match settings.llm_provider.as_str() {
+        "nvidia" => {
+            let mut h = HashMap::new();
+            h.insert("Authorization".to_string(), format!("Bearer {}", api_key));
+            h.insert("Content-Type".to_string(), "application/json".to_string());
+            ("https://integrate.api.nvidia.com/v1/chat/completions".to_string(), h)
+        }
         "groq" => {
             let mut h = HashMap::new();
             h.insert("Authorization".to_string(), format!("Bearer {}", api_key));

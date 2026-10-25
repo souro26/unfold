@@ -1,9 +1,9 @@
+import 'katex/dist/katex.min.css';
 import { Conversation, Message, BlackboardStep } from './types';
 import {
   loadConversations,
   createNewConversation,
   addMessageToConversation,
-  getActiveConversationId,
   setActiveConversationId,
   deleteConversation,
 } from './services/storage';
@@ -73,12 +73,10 @@ export class App {
 
   private init(): void {
     this.conversations = loadConversations();
-    this.activeConversationId = getActiveConversationId();
-
-    if (this.activeConversationId && this.conversations.some((c) => c.id === this.activeConversationId)) {
-      this.selectConversation(this.activeConversationId);
-    } else if (this.conversations.length > 0) {
-      this.selectConversation(this.conversations[0].id);
+    // If the latest conversation is empty, select it; otherwise start fresh on launch with clean Home View
+    const latest = this.conversations[0];
+    if (latest && latest.messages.length === 0) {
+      this.selectConversation(latest.id);
     } else {
       this.startNewChat();
     }

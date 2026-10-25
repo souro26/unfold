@@ -157,6 +157,7 @@ fn main() {
             commands::set_click_through,
             commands::get_settings,
             commands::update_settings,
+            commands::save_settings,
             commands::send_message,
             commands::capture_screen,
             commands::capture_screen_with_vision,

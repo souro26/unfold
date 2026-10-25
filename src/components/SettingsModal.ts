@@ -45,6 +45,7 @@ export class SettingsModalComponent {
           <div class="form-group">
             <label for="providerSelect">LLM Provider</label>
             <select id="providerSelect" class="setting-select">
+              <option value="nvidia" ${settings.llm_provider === 'nvidia' ? 'selected' : ''}>NVIDIA NIM (Free Open Source Models)</option>
               <option value="gemini" ${settings.llm_provider === 'gemini' ? 'selected' : ''}>Google Gemini</option>
               <option value="groq" ${settings.llm_provider === 'groq' ? 'selected' : ''}>Groq</option>
               <option value="openai" ${settings.llm_provider === 'openai' ? 'selected' : ''}>OpenAI</option>
@@ -54,7 +55,7 @@ export class SettingsModalComponent {
           </div>
           <div class="form-group">
             <label for="modelInput">Model Name</label>
-            <input type="text" id="modelInput" class="setting-input" value="${escapeHtml(settings.model || 'gemini-1.5-flash')}" placeholder="e.g. gemini-1.5-flash" />
+            <input type="text" id="modelInput" class="setting-input" value="${escapeHtml(settings.model || 'meta/llama-3.3-70b-instruct')}" placeholder="e.g. meta/llama-3.3-70b-instruct" />
           </div>
           <div class="form-group">
             <label for="apiKeyInput" id="apiKeyLabel">API Key</label>
@@ -79,16 +80,22 @@ export class SettingsModalComponent {
 
     const updateProviderHints = () => {
       const val = providerSelect.value;
-      if (val === 'llama_cpp') {
+      if (val === 'nvidia') {
+        apiKeyHint.innerHTML = 'Free open source models! Get key at <a href="https://build.nvidia.com" target="_blank" style="color:var(--accent-teal, #00d4aa);text-decoration:underline;">build.nvidia.com</a>';
+        apiKeyInput.placeholder = 'nvapi-...';
+        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('nemotron') || modelInput.value === 'llama3') {
+          modelInput.value = 'meta/llama-3.3-70b-instruct';
+        }
+      } else if (val === 'llama_cpp') {
         apiKeyHint.textContent = 'Optional for local models (defaults to http://localhost:8080/v1)';
         apiKeyInput.placeholder = 'Optional';
-        if (!modelInput.value || modelInput.value.includes('gemini')) {
+        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('llama-3.3') || modelInput.value === 'llama3') {
           modelInput.value = 'nemotron-3-4b-int4';
         }
       } else if (val === 'ollama') {
         apiKeyHint.textContent = 'Optional for local models (defaults to http://localhost:11434)';
         apiKeyInput.placeholder = 'Optional';
-        if (!modelInput.value || modelInput.value.includes('gemini')) {
+        if (!modelInput.value || modelInput.value.includes('gemini') || modelInput.value.includes('llama-3.3') || modelInput.value.includes('nemotron')) {
           modelInput.value = 'llama3';
         }
       } else {
