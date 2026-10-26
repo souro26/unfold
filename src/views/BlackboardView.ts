@@ -624,24 +624,31 @@ export class BlackboardView {
     this.currentReasoning = reasoning;
     this.currentRawJson = rawJson;
     this.calculateVideoTimeline();
-    this.overlayEl?.classList.add('visible');
-    this.renderCurrentStep();
 
-    // Attach RoughRenderer as Primary chalk engine
+    // 1. Reveal overlay in DOM first
+    this.overlayEl?.classList.add('visible');
+
+    // 2. Immediately resize canvas to real container/window dimensions BEFORE rendering
+    this.resizeCanvas();
+
+    // 3. Attach RoughRenderer as Primary chalk engine
     if (this.canvasEl) {
       this.roughRenderer.attach(this.canvasEl);
     }
 
-    // Attempt hardware-accelerated Skia WASM initialization as fallback
-    const skiaLoaded = await this.skiaRenderer.init();
-    if (skiaLoaded && this.canvasEl) {
-      this.skiaRenderer.attach(this.canvasEl);
-    }
-    this.resizeCanvas();
-    this.drawCanvas();
+    // 4. Render current step with accurate screen dimensions (auto-fit scales to full window)
+    this.renderCurrentStep();
+
+    // 5. Asynchronously initialize Skia WASM fallback without blocking initial render
+    this.skiaRenderer.init().then((loaded) => {
+      if (loaded && this.canvasEl) {
+        this.skiaRenderer.attach(this.canvasEl);
+      }
+    });
+
     this.videoStreamBar?.classList.remove('hidden');
 
-    // Automatically begin video playback with speech narration
+    // 6. Automatically begin video playback with speech narration
     if (steps.length > 0) {
       this.startVideoPlayback();
     }
@@ -696,9 +703,11 @@ export class BlackboardView {
   private resizeCanvas(): void {
     if (!this.canvasEl) return;
     const rect = this.canvasEl.parentElement?.getBoundingClientRect();
-    if (rect) {
-      this.canvasEl.width = rect.width;
-      this.canvasEl.height = rect.height;
+    const w = Math.max(320, Math.floor(rect?.width || window.innerWidth));
+    const h = Math.max(240, Math.floor(rect?.height || (window.innerHeight - 60)));
+    if (this.canvasEl.width !== w || this.canvasEl.height !== h) {
+      this.canvasEl.width = w;
+      this.canvasEl.height = h;
       this.roughRenderer.resize();
       this.skiaRenderer.resize();
       this.drawCanvas();
@@ -710,19 +719,117 @@ export class BlackboardView {
       return { step: 1, title: '', explanation: '', elements: [] };
     }
     const safeIndex = Math.max(0, Math.min(this.currentSteps.length - 1, targetIndex));
-    const accumulatedElements: DrawingElement[] = [];
+
+    // Deduplicate elements by ID or semantic key so elements from previous scenes are NEVER stacked 2x, 3x, 4x
+    const elementMap = new Map<string, DrawingElement>();
+
     for (let i = 0; i <= safeIndex; i++) {
       const stepElements = this.currentSteps[i]?.elements;
       if (stepElements && Array.isArray(stepElements)) {
-        accumulatedElements.push(...stepElements);
+        for (const el of stepElements) {
+          // Identify element by unique id or semantic signature
+          const key = el.id || `${el.type}_${el.text || ''}_${el.start?.x || 0}_${el.start?.y || 0}`;
+          elementMap.set(key, el);
+        }
       }
     }
+
+    const accumulatedElements = Array.from(elementMap.values());
+    const resolvedElements = this.resolveElementOverlaps(accumulatedElements);
+
     return {
       step: safeIndex + 1,
       title: this.currentSteps[safeIndex]?.title || '',
       explanation: this.currentSteps[safeIndex]?.explanation || '',
-      elements: accumulatedElements,
+      elements: resolvedElements,
     };
+  }
+
+  public resolveElementOverlaps(elements: DrawingElement[]): DrawingElement[] {
+    if (!elements || elements.length <= 1) return elements || [];
+
+    // Clone elements to avoid in-place mutation of immutable plan steps
+    const resolved: DrawingElement[] = elements.map((e) => ({
+      ...e,
+      start: e.start ? { ...e.start } : undefined,
+      end: e.end ? { ...e.end } : undefined,
+    }));
+
+    // Bounding box calculation helper
+    const getBBox = (el: DrawingElement) => {
+      const x = el.start?.x ?? 0;
+      const y = el.start?.y ?? 0;
+      if (el.type === 'circle') {
+        const r = el.radius ?? 50;
+        return { minX: x - r, maxX: x + r, minY: y - r, maxY: y + r, cx: x, cy: y, w: r * 2, h: r * 2 };
+      }
+      if (el.type === 'rect') {
+        const w = el.width ?? (el.end ? Math.abs(el.end.x - x) : 160);
+        const h = el.height ?? (el.end ? Math.abs(el.end.y - y) : 80);
+        return { minX: x, maxX: x + w, minY: y, maxY: y + h, cx: x + w / 2, cy: y + h / 2, w, h };
+      }
+      if (el.type === 'line' || el.type === 'arrow') {
+        const x2 = el.end?.x ?? x;
+        const y2 = el.end?.y ?? y;
+        return { minX: Math.min(x, x2), maxX: Math.max(x, x2), minY: Math.min(y, y2), maxY: Math.max(y, y2), cx: (x + x2) / 2, cy: (y + y2) / 2, w: Math.abs(x2 - x), h: Math.abs(y2 - y) };
+      }
+      return { minX: x - 60, maxX: x + 60, minY: y - 15, maxY: y + 15, cx: x, cy: y, w: 120, h: 30 };
+    };
+
+    // 1. Separate into strict visual zones: Top Zone (y: 65..120), Focal Zone (y: 150..390), Footer Zone (y: 415..480)
+    for (const el of resolved) {
+      if (el.type === 'rect' && el.start) {
+        const isHeaderBadge = /(badge|title|setup|header|foundation)/i.test(el.id) || (el.text && /(setup|foundation|overview|step\s*1)/i.test(el.text));
+        const isFooterCard = /(card|summary|formula|takeaway|invariant|rule|result|sla)/i.test(el.id) || (el.text && /(takeaway|invariant|formula|rule|guarantee|p99|key\s*principle)/i.test(el.text));
+
+        // Pull header badges out of the focal area up to the Top Zone
+        if (isHeaderBadge && el.start.y > 120 && el.start.y < 350) {
+          el.start.y = 70;
+        }
+
+        // Push summary/takeaway cards down into the Footer Zone
+        if (isFooterCard && el.start.y < 410) {
+          el.start.y = 415;
+          if (el.end && el.start) {
+            const h = el.height || 60;
+            el.end.y = el.start.y + h;
+          }
+        }
+      }
+    }
+
+    // 2. Prevent colliding cards or boxes from sitting on top of each other
+    for (let i = 0; i < resolved.length; i++) {
+      for (let j = i + 1; j < resolved.length; j++) {
+        const a = resolved[i];
+        const b = resolved[j];
+        if (!a.start || !b.start) continue;
+
+        // Skip parent boundary frames (like univ_frame or envelopes)
+        if (a.id.includes('frame') || b.id.includes('frame') || a.id.includes('envelope') || b.id.includes('envelope')) continue;
+
+        const b1 = getBBox(a);
+        const b2 = getBBox(b);
+
+        const overlapX = Math.min(b1.maxX, b2.maxX) - Math.max(b1.minX, b2.minX);
+        const overlapY = Math.min(b1.maxY, b2.maxY) - Math.max(b1.minY, b2.minY);
+
+        if (overlapX > 30 && overlapY > 20) {
+          // If both are cards in the footer zone (y >= 400), shift b horizontally so they sit side by side
+          if (b1.minY >= 390 && b2.minY >= 390) {
+            if (b.start.x <= a.start.x + 100) {
+              b.start.x = Math.min(720, (a.start.x || 200) + (b1.w || 250) + 20);
+            }
+          } else if (Math.abs(b1.cx - b2.cx) < 50 && Math.abs(b1.cy - b2.cy) < 50) {
+            // Entities are placed at almost the exact same coordinates! Shift b horizontally
+            b.start.x += 180;
+            if (b.end) b.end.x += 180;
+          }
+        }
+      }
+    }
+
+    return resolved;
   }
 
   public renderCurrentStep(): void {

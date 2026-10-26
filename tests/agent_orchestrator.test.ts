@@ -345,6 +345,66 @@ Now, look at the bright emerald boundary wrapping around both circles. Every sin
     expect(typeof fit.transX).toBe('number');
     expect(typeof fit.transY).toBe('number');
   });
+
+  it('Universally retains conversation memory across diverse topics (e.g. physics, engineering, everyday science)', () => {
+    // Turn 1 was about how a refrigerator works
+    const priorPhysicsHistory = [
+      {
+        id: 'msg-1',
+        role: 'user' as const,
+        content: 'explain how a refrigerator works',
+        timestamp: Date.now() - 60000,
+      },
+      {
+        id: 'msg-2',
+        role: 'assistant' as const,
+        content: 'A refrigerator works via compression and expansion cycles...',
+        timestamp: Date.now() - 30000,
+      },
+    ];
+
+    // Turn 2 follow-up asking about a specific part
+    const followUp = orchestrator.deconstructPedagogy('why does the compressor get hot?', priorPhysicsHistory);
+    expect(followUp.domain).toBe('physics');
+    expect(followUp.concept.toLowerCase()).toContain('refrigerator');
+    expect(followUp.progressionStages.length).toBe(4);
+
+    // Turn 3 follow-up asking for everyday analogy
+    const followUpSimpler = orchestrator.deconstructPedagogy('can you explain it simpler please?', priorPhysicsHistory);
+    expect(followUpSimpler.domain).toBe('physics');
+    expect(followUpSimpler.concept.toLowerCase()).toContain('refrigerator');
+  });
+
+  it('BlackboardView deduplicates elements and resolves overlapping bounding boxes into clean vertical tiers', async () => {
+    const { BlackboardView } = await import('../src/views/BlackboardView');
+    const view = new BlackboardView();
+
+    // Simulated colliding elements output by an LLM with overlapping cards and focal elements
+    const collidingElements = [
+      // Title badge placed in focal area (y = 200)
+      { id: 'badge_title', type: 'rect' as const, color: '#00f0ff', start: { x: 100, y: 200 }, width: 250, height: 50, text: 'Foundation Setup' },
+      // Focal circle
+      { id: 'focal_center', type: 'circle' as const, color: '#ff5555', start: { x: 450, y: 250 }, radius: 60, text: 'Core Mechanism' },
+      // Summary card placed right over the focal circle (y = 250)
+      { id: 'summary_card', type: 'rect' as const, color: '#50fa7b', start: { x: 250, y: 250 }, width: 400, height: 70, text: 'Key Takeaway Invariant' },
+    ];
+
+    const resolved = view.resolveElementOverlaps(collidingElements);
+
+    const badge = resolved.find((e) => e.id === 'badge_title');
+    const focal = resolved.find((e) => e.id === 'focal_center');
+    const card = resolved.find((e) => e.id === 'summary_card');
+
+    // Badge should be pulled up to Header Zone (y <= 120)
+    expect(badge?.start?.y).toBeLessThanOrEqual(120);
+
+    // Focal circle stays in center focal zone (y ~ 250)
+    expect(focal?.start?.y).toBe(250);
+
+    // Summary card should be pushed down into Footer Zone (y >= 400)
+    expect(card?.start?.y).toBeGreaterThanOrEqual(400);
+  });
 });
+
 
 

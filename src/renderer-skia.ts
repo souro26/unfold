@@ -84,6 +84,63 @@ export class SkiaRenderer {
     this.attach(this.canvas);
   }
 
+  public calculateAutoFit(step: BlackboardStep, width: number, height: number): { scale: number; transX: number; transY: number } {
+    const elements = step.elements || [];
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    for (const el of elements) {
+      if (el.start) {
+        const r = el.radius || 0;
+        const w = el.width || (el.end ? Math.abs(el.end.x - el.start.x) : 0);
+        const h = el.height || (el.end ? Math.abs(el.end.y - el.start.y) : 0);
+        minX = Math.min(minX, el.start.x - r);
+        maxX = Math.max(maxX, el.start.x + r + w);
+        minY = Math.min(minY, el.start.y - r);
+        maxY = Math.max(maxY, el.start.y + r + h);
+      }
+      if (el.end) {
+        minX = Math.min(minX, el.end.x);
+        maxX = Math.max(maxX, el.end.x);
+        minY = Math.min(minY, el.end.y);
+        maxY = Math.max(maxY, el.end.y);
+      }
+    }
+
+    if (!isFinite(minX) || !isFinite(maxX) || minX >= maxX) {
+      minX = 80;
+      maxX = 820;
+    }
+    if (!isFinite(minY) || !isFinite(maxY) || minY >= maxY) {
+      minY = 50;
+      maxY = 510;
+    }
+
+    const boundsW = Math.max(320, maxX - minX);
+    const boundsH = Math.max(220, maxY - minY);
+    const boundsCenterX = (minX + maxX) / 2;
+    const boundsCenterY = (minY + maxY) / 2;
+
+    const paddingX = 80;
+    const paddingTop = 75;
+    const paddingBottom = 85;
+    const availW = Math.max(200, width - paddingX * 2);
+    const availH = Math.max(200, height - (paddingTop + paddingBottom));
+
+    let scale = Math.min(availW / boundsW, availH / boundsH);
+    scale = Math.max(0.75, Math.min(2.6, scale));
+
+    const targetCenterX = width / 2;
+    const targetCenterY = paddingTop + availH / 2;
+
+    const transX = targetCenterX - boundsCenterX * scale;
+    const transY = targetCenterY - boundsCenterY * scale;
+
+    return { scale, transX, transY };
+  }
+
   public renderStep(step: BlackboardStep, progress: number = 1.0): void {
     if (!this.surface || !this.canvas || !this.CanvasKit) return;
 
@@ -98,6 +155,11 @@ export class SkiaRenderer {
       // Draw background grid
       this.drawGrid(ck, skCanvas, this.canvas.width, this.canvas.height);
 
+      skCanvas.save();
+      const fit = this.calculateAutoFit(step, this.canvas.width, this.canvas.height);
+      skCanvas.translate(fit.transX, fit.transY);
+      skCanvas.scale(fit.scale, fit.scale);
+
       if (step.elements && step.elements.length > 0) {
         step.elements.forEach((el) => {
           try {
@@ -108,6 +170,7 @@ export class SkiaRenderer {
         });
       }
 
+      skCanvas.restore();
       this.surface.flush();
     } catch (err) {
       console.warn('Skia render fallback triggered:', err);

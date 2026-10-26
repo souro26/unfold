@@ -89,9 +89,11 @@ export class AgentOrchestrator {
 
     try {
       // -------------------------------------------------------------
-      // Multi-Turn Context: Retrieve Conversation History
+      // Multi-Turn Context: Retrieve Prior Conversation History
       // -------------------------------------------------------------
-      const convHistory: Message[] = conversationId ? getConversationHistory(conversationId) : [];
+      const allHistory: Message[] = conversationId ? getConversationHistory(conversationId) : [];
+      // Prior turns excludes the current prompt (which was appended immediately before executePipeline)
+      const priorHistory = allHistory.slice(0, -1);
 
       // -------------------------------------------------------------
       // LAYER 1: Intent & Pedagogical Deconstruction Agent
@@ -104,7 +106,7 @@ export class AgentOrchestrator {
 
       // Small micro-delay allows UI to render the agent thinking state
       await new Promise((r) => setTimeout(r, 120));
-      const pedagogy = this.deconstructPedagogy(cleanPrompt, convHistory);
+      const pedagogy = this.deconstructPedagogy(cleanPrompt, priorHistory);
       logger.logFold1Pedagogy(pedagogy);
 
       // -------------------------------------------------------------
@@ -129,7 +131,7 @@ export class AgentOrchestrator {
         detail: 'Compiling structured execution plan and dispatching to drawing agent...',
       });
 
-      const finalAgentPrompt = this.synthesizeDrawingPrompt(cleanPrompt, pedagogy, spatialBlueprint, convHistory);
+      const finalAgentPrompt = this.synthesizeDrawingPrompt(cleanPrompt, pedagogy, spatialBlueprint, priorHistory);
       logger.logFold3Prompt(finalAgentPrompt);
 
       const trace: AgentReasoningTrace = {
@@ -146,10 +148,16 @@ export class AgentOrchestrator {
       // -------------------------------------------------------------
       const settings = await getSettings();
       const llmStartTime = Date.now();
-      const historyPayload = convHistory.slice(-8).map((m) => ({
-        role: m.role,
-        content: m.content.slice(0, 1000),
-      }));
+      const historyPayload = priorHistory.slice(-6).map((m) => {
+        let clean = m.content
+          .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+          .replace(/```(?:json)?[\s\S]*?```/gi, '')
+          .trim();
+        return {
+          role: m.role,
+          content: clean.slice(0, 1000),
+        };
+      });
       const rawResponse = await sendMessage(finalAgentPrompt, conversationId, screenImageBase64, historyPayload);
       const llmDurationMs = Date.now() - llmStartTime;
 
@@ -194,41 +202,47 @@ export class AgentOrchestrator {
   // =========================================================================
   public deconstructPedagogy(prompt: string, history?: Message[]): PedagogySpec {
     const cleanPrompt = prompt.trim();
+    let priorSubject = '';
     let isFollowUp = false;
     let followUpType: 'simpler' | 'example' | 'clarify' | 'general' = 'general';
 
-    // Follow-up detection (e.g. "can you explain it simpler please?", "give another example", "why?", etc.)
-    const followUpRegex = /^(?:can\s+you\s+|could\s+you\s+|please\s+)?(?:explain\s+(?:it\s+)?(?:simpler|more\s+simply|in\s+simple\s+terms|again|further|more)|make\s+it\s+simpler|simplify|give\s+(?:me\s+)?(?:an|another)\s+example|why(?:\s+is\s+that)?|how\s+so|what\s+about|what\s+if|tell\s+me\s+more|elaborate|clarify|summarize)(?:[?!.,\s]|$)/i;
-
-    const wordCount = cleanPrompt.split(/\s+/).length;
-    if (followUpRegex.test(cleanPrompt) || (wordCount <= 6 && !/(tangent|derivative|calculus|integral|curve|circle|geometry|set|union|intersection|venn|subset|tree|binary|algorithm|microservice|physics|force)/i.test(cleanPrompt))) {
-      isFollowUp = true;
-      if (/simpler|simple|easier|layman/i.test(cleanPrompt)) {
-        followUpType = 'simpler';
-      } else if (/example|instance|case/i.test(cleanPrompt)) {
-        followUpType = 'example';
-      }
-    }
-
-    let contextualTopic = '';
-    if (isFollowUp && history && history.length > 0) {
+    // Retrieve previous user subject from conversation history
+    if (history && history.length > 0) {
       for (let i = history.length - 1; i >= 0; i--) {
         const msg = history[i];
         if (msg.role === 'user') {
-          const pastText = msg.content.trim();
-          if (pastText && !followUpRegex.test(pastText) && pastText.length > 5) {
-            contextualTopic = pastText;
+          const past = msg.content.trim();
+          if (past && past !== cleanPrompt && past.length > 3) {
+            priorSubject = past
+              .replace(/^(?:teach\s+me|explain|what\s+is|how\s+does|draw|show\s+me|visualize)\s+(?:about\s+|what\s+|how\s+)?/i, '')
+              .replace(/[?!.]/g, '')
+              .trim();
             break;
           }
         }
       }
     }
 
-    // Merge context if follow-up
-    const resolvedPrompt = contextualTopic
+    if (priorSubject) {
+      const followUpRegex = /^(?:can\s+you\s+|could\s+you\s+|please\s+)?(?:explain\s+(?:it\s+)?(?:simpler|more\s+simply|in\s+simple\s+terms|again|further|more)|make\s+it\s+simpler|simplify|give\s+(?:me\s+)?(?:an|another)\s+example|why(?:\s+is\s+that)?|how\s+so|what\s+about|what\s+if|tell\s+me\s+more|elaborate|clarify|summarize)(?:[?!.,\s]|$)/i;
+      const wordCount = cleanPrompt.split(/\s+/).length;
+      const hasRelativePronoun = /\b(it|this|that|these|those|why|how)\b/i.test(cleanPrompt);
+
+      if (followUpRegex.test(cleanPrompt) || hasRelativePronoun || wordCount <= 7) {
+        isFollowUp = true;
+        if (/simpler|simple|easier|layman/i.test(cleanPrompt)) {
+          followUpType = 'simpler';
+        } else if (/example|instance|case/i.test(cleanPrompt)) {
+          followUpType = 'example';
+        }
+      }
+    }
+
+    // Universal Context Merging across turns
+    const resolvedPrompt = (isFollowUp && priorSubject)
       ? (followUpType === 'simpler'
-          ? `${contextualTopic} (explained in simpler intuitive terms with everyday analogies)`
-          : `${contextualTopic} (${cleanPrompt})`)
+          ? `${priorSubject} (explained in simpler intuitive terms with everyday analogies)`
+          : `${priorSubject} (${cleanPrompt})`)
       : cleanPrompt;
 
     const p = resolvedPrompt.toLowerCase();
@@ -241,7 +255,7 @@ export class AgentOrchestrator {
       domain = 'algorithms';
     } else if (/(system|microservice|client|server|database|distributed|network|api|architecture|consensus|cache|docker|kubernetes|raft|paxos|failover)/i.test(p)) {
       domain = 'systems';
-    } else if (/(velocity|force|gravity|quantum|energy|wave|physics|orbit|momentum|newton|motion|acceleration|friction|thermodynamics)/i.test(p)) {
+    } else if (/(velocity|\bforce\b|gravity|quantum|energy|\bwave\b|physics|orbit|momentum|newton|motion|acceleration|friction|thermodynamics|\bheat\b|\bhot\b|\bcold\b|\bcool\b|temperature|thermal|compress|pressure|refrigerat|engine|electric|magnet|\boptics?\b|sound|fluid|bernoulli)/i.test(p)) {
       domain = 'physics';
     }
 
@@ -532,32 +546,32 @@ export class AgentOrchestrator {
     return {
       concept: topic,
       domain,
-      coreIntuition: `Breaking ${topic} down from intuitive foundation to dynamic interaction, comparative contrast, and practical takeaway.`,
+      coreIntuition: `Breaking ${topic} down from intuitive visual foundation to dynamic transformation, comparative contrast, and definitive takeaway.`,
       commonMisconceptions: ['Abstracting without a concrete visual anchor', 'Confusing primary mechanisms with secondary side effects'],
       progressionStages: [
         {
           stageNumber: 1,
           title: `Visual Foundation: ${topic} Setup`,
-          objective: 'Establish the core visual metaphor and baseline anchor entities.',
-          narrationScript: `Welcome to our blackboard exploration of ${topic}. Let us look at the foundational components first.`,
+          objective: `Establish the foundational anchor entities and visual context for ${topic}.`,
+          narrationScript: `Welcome to our blackboard exploration of ${topic}. Look at the board: on the left, we establish our primary subject, and on the right, the interacting environment. Notice how these two baseline components are arranged cleanly before any process begins.`,
         },
         {
           stageNumber: 2,
           title: `The Core Mechanism: ${topic} in Action`,
-          objective: 'Show direct relationships, dynamic connections, and causal operational arrows.',
-          narrationScript: `Now, observe the core mechanism in action. The flow lines and directional markers demonstrate the underlying process.`,
+          objective: `Draw the primary dynamic process, directional flows, and transformation connecting the entities.`,
+          narrationScript: `Now, observe the core mechanism of ${topic} in action. Look at the directional flow arrow connecting our two components across the center. As energy or information moves through this active channel, the entire transformation takes place.`,
         },
         {
           stageNumber: 3,
           title: 'Critical Contrast: Misconceptions & Edge Cases',
-          objective: 'Juxtapose against common misconceptions, alternative states, and failure modes.',
-          narrationScript: `Notice the critical distinction: contrasting the true mechanism against common misconceptions reveals what makes ${topic} uniquely effective.`,
+          objective: `Contrast the true mechanism against common misunderstandings, alternative states, and failure modes.`,
+          narrationScript: `Here is the critical distinction that catches most learners: notice the contrast badge at the top right. Many people assume this process happens passively, but in reality, without the active driving force we just drew, the system remains completely dormant.`,
         },
         {
           stageNumber: 4,
           title: 'Definitive Takeaway & Core Rule Card',
-          objective: 'Summarize key principles, invariants, and practical real-world intuition.',
-          narrationScript: `Here is the key takeaway: remember this central relationship whenever you work with ${topic}.`,
+          objective: `Display the definitive takeaway card, governing relationship, and practical intuition.`,
+          narrationScript: `And that brings us to our definitive takeaway rule. Look at the summary card across the bottom of the board: remember this foundational relationship whenever you analyze or reason about ${topic}.`,
         },
       ],
     };
@@ -967,34 +981,42 @@ export class AgentOrchestrator {
   }
 
   private buildGeneralSpatialBlueprint(origin: Point, palette: any, pedagogy: PedagogySpec): SpatialBlueprint {
-    const cx = 450;
-    const cy = 240;
+    // Universal Clean Layout Blueprint:
+    // Header Zone: y = 65 .. 120 (Title badges, context callouts)
+    // Main Focal Zone: y = 160 .. 380 (Spaced horizontally across x = 140 .. 760)
+    // Footer Takeaway Zone: y = 415 .. 475 (Takeaway summary card)
 
     // Scene 1: Baseline Entities & Context Setup
     const step1: DrawingElement[] = [
-      { id: 'box_a', type: 'rect', color: palette.primary, strokeWidth: 2.5, start: { x: cx - 250, y: cy - 70 }, width: 200, height: 130, text: `${pedagogy.concept}: Primary Actor` },
-      { id: 'box_b', type: 'rect', color: palette.secondary, strokeWidth: 2.5, start: { x: cx + 50, y: cy - 70 }, width: 200, height: 130, text: `${pedagogy.concept}: Target Context` },
-      { id: 'badge_title', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 100, y: 50 }, width: 280, height: 50, text: `${pedagogy.concept}: Setup` },
+      // Primary Subject on the Left
+      { id: 'entity_a', type: 'rect', color: palette.primary, strokeWidth: 2.5, start: { x: 150, y: 170 }, width: 220, height: 150, text: `${pedagogy.concept}: Subject A` },
+      // Interacting Target / Environment on the Right
+      { id: 'entity_b', type: 'rect', color: palette.secondary, strokeWidth: 2.5, start: { x: 530, y: 170 }, width: 220, height: 150, text: `${pedagogy.concept}: Context B` },
+      // Title badge in Header Zone
+      { id: 'badge_title', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 120, y: 65 }, width: 340, height: 45, text: `${pedagogy.concept}: Foundation` },
     ];
 
     // Scene 2: The Core Mechanism in Action
     const step2: DrawingElement[] = [
       ...step1,
-      { id: 'flow_arrow', type: 'arrow', color: palette.accent, strokeWidth: 3.5, start: { x: cx - 50, y: cy - 5 }, end: { x: cx + 50, y: cy - 5 }, text: 'Active Transformation' },
-      { id: 'center_hub', type: 'circle', color: palette.highlight, strokeWidth: 3, start: { x: cx, y: cy + 100 }, radius: 50, text: 'Core Operation' },
+      // Operational Arrow across the center gap (x: 375 to 525)
+      { id: 'mechanism_arrow', type: 'arrow', color: palette.accent, strokeWidth: 3.5, start: { x: 375, y: 245 }, end: { x: 525, y: 245 }, text: 'Active Process' },
+      // Central indicator dot
+      { id: 'center_indicator', type: 'circle', color: palette.highlight, strokeWidth: 2.5, start: { x: 450, y: 200 }, radius: 18, text: 'Action' },
     ];
 
     // Scene 3: Critical Contrast & Counterexamples
     const step3: DrawingElement[] = [
       ...step2,
-      { id: 'contrast_arrow', type: 'arrow', color: palette.auxiliary, strokeWidth: 2, start: { x: cx - 150, y: cy + 60 }, end: { x: cx - 50, y: cy + 100 }, text: 'Contrast State' },
-      { id: 'misconception_card', type: 'rect', color: palette.highlight, fill: 'rgba(255, 85, 85, 0.1)', strokeWidth: 1.5, start: { x: 530, y: 50 }, width: 280, height: 60, text: 'Misconception Clarified' },
+      // Contrast Badge in Header Zone on the right
+      { id: 'contrast_badge', type: 'rect', color: palette.auxiliary, fill: 'rgba(255, 184, 108, 0.12)', strokeWidth: 1.5, start: { x: 500, y: 65 }, width: 300, height: 45, text: 'Contrast: Key Distinction' },
     ];
 
     // Scene 4: Definitive Takeaway Rule Card
     const step4: DrawingElement[] = [
       ...step3,
-      { id: 'summary_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.15)', strokeWidth: 2, start: { x: cx - 220, y: 350 }, width: 440, height: 75, text: `Key Principle: Core Invariant for ${pedagogy.concept}` },
+      // Takeaway Card in Footer Zone
+      { id: 'summary_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.15)', strokeWidth: 2, start: { x: 180, y: 415 }, width: 540, height: 55, text: `Key Principle: Core Invariant for ${pedagogy.concept}` },
     ];
 
     return {
@@ -1025,10 +1047,13 @@ export class AgentOrchestrator {
       .join('\n');
 
     const conversationContext = history && history.length > 0
-      ? `\nONGOING TUTORIAL DIALOGUE HISTORY (Maintain continuous conversational memory):\n` +
+      ? `\nONGOING TUTORIAL DIALOGUE HISTORY (Maintain continuous conversational memory across turns):\n` +
         history
           .slice(-6)
-          .map((m) => `${m.role === 'user' ? 'Student' : 'Master Teacher'}: "${m.content.slice(0, 300)}"`)
+          .map((m) => {
+            let clean = m.content.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '').replace(/```(?:json)?[\s\S]*?```/gi, '').trim();
+            return `${m.role === 'user' ? 'Student' : 'Master Teacher'}: "${clean.slice(0, 300)}"`;
+          })
           .join('\n') + '\n'
       : '';
 
@@ -1052,16 +1077,21 @@ INSTRUCTIONS FOR DRAWING AGENT & VOICE TEACHER:
 1. DELIVER A MASTER-TEACHER LESSON:
    Your spoken narration (both in Markdown headers ### Step X: and in the JSON "explanation" field) MUST BE LITERALLY WHAT A MASTER TEACHER (like 3Blue1Brown or Feynman) SPEAKS ALOUD DIRECTLY TO A STUDENT at the blackboard.
    - Speak in the warm, conversational second person: "Look at the board: we start with...", "Notice what happens when...", "Why does this matter? Because...".
-   - NEVER use robotic developer engineering commands (like "Establish Set A...", "Show resulting union...").
+   - NEVER use robotic developer engineering commands (like "Establish entity...", "Render diagram...").
    - Do NOT worry about video or narration length: make each step's spoken explanation as rich, complete, and thorough as necessary to genuinely teach the concept.
-2. DRAW MEANINGFUL CONCRETE FIGURES:
-   Every shape drawn MUST have mathematical and visual integrity:
-   - For Set Theory: ALWAYS draw overlapping Venn circles with member elements inside (e.g., • 1, • 2 in Set A, • 3 in the overlap intersection, • 4, • 5 in Set B), an envelope highlighting the union, a double-counting warning, and the inclusion-exclusion formula card. NEVER draw abstract empty boxes or zero-width collapsed lines!
-   - For Math: Real coordinate axes, curves, tangent lines touching at one point P, secants, slope triangles, right angles.
-   - For Physics: Reference planes, masses, force vector arrows (applied, friction, weight, normal), acceleration, Newton cards.
-   - For Systems/Algorithms: Real service nodes, protocol labels, array cells, binary trees with keys.
-3. RETAIN FOUNDATIONAL ELEMENTS ACROSS SCENES:
-   The whiteboard is a continuous streamed video. Elements from earlier scenes must persist so the drawing builds up organically without canvas wipes.
+
+2. DRAW SPREAD OUT, MEANINGFUL FIGURES ACROSS THE FULL SCREEN:
+   - SPREAD ACROSS THE CANVAS: Use the full horizontal width (X from 100 to 800) and height (Y from 65 to 480). DO NOT bunch everything into the top-left corner!
+   - STRICT NON-OVERLAPPING ZONES:
+     * TOP ZONE (Y = 65..120): Title badges, context callouts, or contrast tags.
+     * CENTER FOCAL ZONE (Y = 150..390): Main diagram shapes, bodies, curves, arrows, or interacting nodes.
+     * BOTTOM FOOTER ZONE (Y = 415..480): Definitive takeaway cards, formulas, or invariant rules.
+     * NEVER draw cards, text, or arrows directly on top of other shapes!
+   - Every shape drawn MUST have conceptual integrity for whatever topic is being taught (physics bodies & force vectors, mathematical curves & tangents, software service nodes & protocol arrows, biological systems & process flows, or everyday mechanisms).
+
+3. CONTINUOUS WHITEBOARD SCENES:
+   - Each step in your JSON array represents the full visual state of the blackboard for that scene.
+   - Assign clean, consistent IDs so updated elements transition smoothly without duplicating or cluttering the canvas.
 4. Output your reasoning in a <reasoning> block detailing your pedagogical choices.
 5. In your \`\`\`json block, provide the 4 progressive steps with explicit coordinates ("rect", "circle", "line", "arrow", "path", "text") matching the canvas layout, and the full spoken teacher script in "explanation".`;
   }
