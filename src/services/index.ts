@@ -4,3 +4,5 @@ export * from './speech';
 export * from './export';
 export * from './PluginManager';
 export * from './collaboration';
+export * from './DecisionEngineLogger';
+

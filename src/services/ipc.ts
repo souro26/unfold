@@ -92,3 +92,36 @@ export async function captureScreenWithVision(
     vision_request: visionRequest,
   });
 }
+
+export async function writeLogFile(filename: string, content: string): Promise<string> {
+  try {
+    return await invoke<string>('write_log_file', { filename, content });
+  } catch (err) {
+    console.warn(`[IPC writeLogFile fallback] Unable to write ${filename} via Tauri IPC:`, err);
+    try {
+      localStorage.setItem(`unfold_log_${filename}`, content);
+    } catch {}
+    return `localStorage://unfold_log_${filename}`;
+  }
+}
+
+export async function appendLogFile(filename: string, content: string): Promise<string> {
+  try {
+    return await invoke<string>('append_log_file', { filename, content });
+  } catch (err) {
+    console.warn(`[IPC appendLogFile fallback] Unable to append to ${filename} via Tauri IPC:`, err);
+    try {
+      const prev = localStorage.getItem(`unfold_log_${filename}`) || '';
+      localStorage.setItem(`unfold_log_${filename}`, prev + content);
+    } catch {}
+    return `localStorage://unfold_log_${filename}`;
+  }
+}
+
+export async function getLogsDirectory(): Promise<string> {
+  try {
+    return await invoke<string>('get_logs_directory');
+  } catch (err) {
+    return 'logs/';
+  }
+}

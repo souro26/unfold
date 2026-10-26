@@ -1,5 +1,6 @@
 import { BlackboardStep, DrawingElement, Point } from '../types';
-import { sendMessage } from './ipc';
+import { getSettings, sendMessage } from './ipc';
+import { DecisionEngineLogger } from './DecisionEngineLogger';
 
 export interface PedagogyMilestone {
   stageNumber: number;
@@ -82,62 +83,100 @@ export class AgentOrchestrator {
     onProgress?: (status: AgentProgressStatus) => void
   ): Promise<AgentExecutionResult> {
     const cleanPrompt = userPrompt.trim();
+    const logger = DecisionEngineLogger.getInstance();
+    logger.startSession(cleanPrompt, conversationId, screenImageBase64);
 
-    // -------------------------------------------------------------
-    // LAYER 1: Intent & Pedagogical Deconstruction Agent
-    // -------------------------------------------------------------
-    onProgress?.({
-      layer: 1,
-      title: 'Layer 1: Concept & Pedagogical Deconstruction',
-      detail: 'Analyzing cognitive hurdles, mental models, and progressive learning milestones...',
-    });
+    try {
+      // -------------------------------------------------------------
+      // LAYER 1: Intent & Pedagogical Deconstruction Agent
+      // -------------------------------------------------------------
+      onProgress?.({
+        layer: 1,
+        title: 'Layer 1: Concept & Pedagogical Deconstruction',
+        detail: 'Analyzing cognitive hurdles, mental models, and progressive learning milestones...',
+      });
 
-    // Small micro-delay allows UI to render the agent thinking state
-    await new Promise((r) => setTimeout(r, 120));
-    const pedagogy = this.deconstructPedagogy(cleanPrompt);
+      // Small micro-delay allows UI to render the agent thinking state
+      await new Promise((r) => setTimeout(r, 120));
+      const pedagogy = this.deconstructPedagogy(cleanPrompt);
+      logger.logFold1Pedagogy(pedagogy);
 
-    // -------------------------------------------------------------
-    // LAYER 2: Spatial Blueprint & Geometric Coordinate Agent
-    // -------------------------------------------------------------
-    onProgress?.({
-      layer: 2,
-      title: 'Layer 2: Spatial Blueprint & Coordinate Geometry',
-      detail: 'Calculating 2D chalkboard layout, coordinate anchors, SVG paths, and color semantics...',
-    });
+      // -------------------------------------------------------------
+      // LAYER 2: Spatial Blueprint & Geometric Coordinate Agent
+      // -------------------------------------------------------------
+      onProgress?.({
+        layer: 2,
+        title: 'Layer 2: Spatial Blueprint & Coordinate Geometry',
+        detail: 'Calculating 2D chalkboard layout, coordinate anchors, SVG paths, and color semantics...',
+      });
 
-    await new Promise((r) => setTimeout(r, 120));
-    const spatialBlueprint = this.architectSpatialBlueprint(pedagogy);
+      await new Promise((r) => setTimeout(r, 120));
+      const spatialBlueprint = this.architectSpatialBlueprint(pedagogy);
+      logger.logFold2Spatial(spatialBlueprint);
 
-    // -------------------------------------------------------------
-    // LAYER 3: Master Drawing Prompt Synthesis & Compiler Agent
-    // -------------------------------------------------------------
-    onProgress?.({
-      layer: 3,
-      title: 'Layer 3: Drawing Agent Synthesis (Rough.js)',
-      detail: 'Compiling structured execution plan and dispatching to drawing agent...',
-    });
+      // -------------------------------------------------------------
+      // LAYER 3: Master Drawing Prompt Synthesis & Compiler Agent
+      // -------------------------------------------------------------
+      onProgress?.({
+        layer: 3,
+        title: 'Layer 3: Drawing Agent Synthesis (Rough.js)',
+        detail: 'Compiling structured execution plan and dispatching to drawing agent...',
+      });
 
-    const finalAgentPrompt = this.synthesizeDrawingPrompt(cleanPrompt, pedagogy, spatialBlueprint);
+      const finalAgentPrompt = this.synthesizeDrawingPrompt(cleanPrompt, pedagogy, spatialBlueprint);
+      logger.logFold3Prompt(finalAgentPrompt);
 
-    const trace: AgentReasoningTrace = {
-      pedagogicalReasoning: `Domain: ${pedagogy.domain.toUpperCase()}\nCore Intuition: ${pedagogy.coreIntuition}\nProgression:\n${pedagogy.progressionStages
-        .map((s) => `  ${s.stageNumber}. ${s.title}: ${s.objective}`)
-        .join('\n')}\nMisconceptions to Avoid:\n${pedagogy.commonMisconceptions.map((m) => `  - ${m}`).join('\n')}`,
-      spatialBlueprintReasoning: `Canvas: 900x560, Origin at (${spatialBlueprint.coordinateFrame.origin.x}, ${spatialBlueprint.coordinateFrame.origin.y})\nColor Mapping:\n  Primary: ${spatialBlueprint.colorPalette.primary}\n  Secondary: ${spatialBlueprint.colorPalette.secondary}\n  Accent: ${spatialBlueprint.colorPalette.accent}\n  Highlight: ${spatialBlueprint.colorPalette.highlight}\nStep Layouts Generated: ${spatialBlueprint.stepBlueprints.length} visual blackboard scenes.`,
-      synthesisReasoning: `Synthesized master drawing prompt fusing pedagogical progression with exact geometric constraints. Ready for organic Rough.js rendering.`,
-      finalPrompt: finalAgentPrompt,
-    };
+      const trace: AgentReasoningTrace = {
+        pedagogicalReasoning: `Domain: ${pedagogy.domain.toUpperCase()}\nCore Intuition: ${pedagogy.coreIntuition}\nProgression:\n${pedagogy.progressionStages
+          .map((s) => `  ${s.stageNumber}. ${s.title}: ${s.objective}`)
+          .join('\n')}\nMisconceptions to Avoid:\n${pedagogy.commonMisconceptions.map((m) => `  - ${m}`).join('\n')}`,
+        spatialBlueprintReasoning: `Canvas: 900x560, Origin at (${spatialBlueprint.coordinateFrame.origin.x}, ${spatialBlueprint.coordinateFrame.origin.y})\nColor Mapping:\n  Primary: ${spatialBlueprint.colorPalette.primary}\n  Secondary: ${spatialBlueprint.colorPalette.secondary}\n  Accent: ${spatialBlueprint.colorPalette.accent}\n  Highlight: ${spatialBlueprint.colorPalette.highlight}\nStep Layouts Generated: ${spatialBlueprint.stepBlueprints.length} visual blackboard scenes.`,
+        synthesisReasoning: `Synthesized master drawing prompt fusing pedagogical progression with exact geometric constraints. Ready for organic Rough.js rendering.`,
+        finalPrompt: finalAgentPrompt,
+      };
 
-    const rawResponse = await sendMessage(finalAgentPrompt, conversationId, screenImageBase64);
+      // -------------------------------------------------------------
+      // LAYER 4: LLM Inference
+      // -------------------------------------------------------------
+      const settings = await getSettings();
+      const llmStartTime = Date.now();
+      const rawResponse = await sendMessage(finalAgentPrompt, conversationId, screenImageBase64);
+      const llmDurationMs = Date.now() - llmStartTime;
 
-    // Parse the generated response
-    const parsedPlan = this.parseAgentPlan(rawResponse, spatialBlueprint);
+      logger.logFold4Inference(
+        settings.llm_provider || 'nvidia',
+        settings.model || 'nvidia/nemotron-3.5-bolt-e4b',
+        llmDurationMs,
+        rawResponse
+      );
 
-    return {
-      plan: parsedPlan,
-      trace,
-      markdownResponse: rawResponse,
-    };
+      // -------------------------------------------------------------
+      // LAYER 5: Parse Plan
+      // -------------------------------------------------------------
+      const parsedPlan = this.parseAgentPlan(rawResponse, spatialBlueprint);
+      logger.logFold5Plan(parsedPlan, parsedPlan.rawJson);
+
+      // -------------------------------------------------------------
+      // LAYER 6: Drawing Dispatch Log
+      // -------------------------------------------------------------
+      logger.logFold6DrawingDispatch(
+        parsedPlan.steps,
+        'Rough.js Chalkboard Engine (CanvasKit GPU Fallback)',
+        parsedPlan.steps.map((s) => s.explanation || s.title)
+      );
+
+      // Persist full session log files to logs/ directory
+      await logger.finalizeSession();
+
+      return {
+        plan: parsedPlan,
+        trace,
+        markdownResponse: rawResponse,
+      };
+    } catch (err: any) {
+      await logger.finalizeSession(err);
+      throw err;
+    }
   }
 
   // =========================================================================

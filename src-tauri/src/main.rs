@@ -165,6 +165,9 @@ fn main() {
             commands::get_screen_capture_permission,
             commands::set_screen_capture_permission,
             commands::synthesize_speech,
+            commands::write_log_file,
+            commands::append_log_file,
+            commands::get_logs_directory,
         ])
         .on_window_event(|window, event| {
             tracing::debug!("Window event: label={:?}, event={:?}", window.label(), event);
