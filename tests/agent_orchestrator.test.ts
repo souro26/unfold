@@ -166,4 +166,88 @@ A secant intersects at two points.
 
     mockSend.mockRestore();
   });
+
+  it('Deconstructs set theory and generates authentic Venn diagrams with concrete member elements', () => {
+    const setPed = orchestrator.deconstructPedagogy('what is Union in Set theory?');
+    expect(setPed.domain).toBe('mathematics');
+    expect(setPed.concept).toContain('Set');
+    expect(setPed.progressionStages.length).toBe(4);
+    expect(setPed.progressionStages[0].title).toContain('Sets A & B');
+    expect(setPed.progressionStages[1].title).toContain('Grand Union');
+    expect(setPed.progressionStages[2].title).toContain('Double-Counting');
+    expect(setPed.progressionStages[3].title).toContain('Inclusion-Exclusion');
+
+    const setSpatial = orchestrator.architectSpatialBlueprint(setPed);
+    expect(setSpatial.stepBlueprints.length).toBe(4);
+
+    // Scene 1: Must contain circles for Set A and Set B, and member element dots (1, 2, 3, 4, 5)
+    const s1 = setSpatial.stepBlueprints[0];
+    expect(s1.elements.some((e) => e.text?.includes('Set A'))).toBe(true);
+    expect(s1.elements.some((e) => e.text?.includes('Set B'))).toBe(true);
+    expect(s1.elements.some((e) => e.text?.includes('• 1'))).toBe(true);
+    expect(s1.elements.some((e) => e.text?.includes('• 3'))).toBe(true);
+    expect(s1.elements.some((e) => e.text?.includes('• 5'))).toBe(true);
+
+    // Scene 2: Grand union card
+    const s2 = setSpatial.stepBlueprints[1];
+    expect(s2.elements.some((e) => e.text?.includes('A ∪ B'))).toBe(true);
+
+    // Scene 3: Double-counting warning card
+    const s3 = setSpatial.stepBlueprints[2];
+    expect(s3.elements.some((e) => e.text?.includes('Double-Counting'))).toBe(true);
+
+    // Scene 4: Inclusion-Exclusion formula card
+    const s4 = setSpatial.stepBlueprints[3];
+    expect(s4.elements.some((e) => e.text?.includes('|A ∪ B| = |A| + |B| - |A ∩ B|'))).toBe(true);
+  });
+
+  it('Extracts rich conversational master-teacher narration from Markdown headers over robotic developer directives', async () => {
+    const ipc = await import('../src/services/ipc');
+    const mockSend = vi.spyOn(ipc, 'sendMessage').mockResolvedValue(`
+# Union in Set Theory
+
+### Step 1: Overlapping Sets
+Imagine you have two groups of things. Look at the board: we draw two overlapping circles inside our universe. Circle A has items 1 and 2, Circle B has items 4 and 5, and right in the middle is item 3.
+
+### Step 2: The Grand Union
+Now, look at the bright emerald boundary wrapping around both circles. Every single item belongs to the Union.
+
+\`\`\`json
+{
+  "steps": [
+    {
+      "step": 1,
+      "title": "Overlapping Sets",
+      "explanation": "Establish Set A and Set B with overlap",
+      "elements": [
+        { "id": "c_a", "type": "circle", "color": "#00f0ff", "start": { "x": 370, "y": 250 }, "radius": 115 }
+      ]
+    },
+    {
+      "step": 2,
+      "title": "The Grand Union",
+      "explanation": "Show resulting union",
+      "elements": []
+    }
+  ]
+}
+\`\`\`
+    `);
+
+    const result = await orchestrator.executePipeline(
+      'what is union in set theory',
+      'test-conv-teacher',
+      undefined
+    );
+
+    // Verify robotic developer imperatives were replaced by the warm conversational teacher speech
+    expect(result.plan.steps[0].explanation).toContain('Imagine you have two groups of things');
+    expect(result.plan.steps[0].explanation).not.toBe('Establish Set A and Set B with overlap');
+
+    expect(result.plan.steps[1].explanation).toContain('Now, look at the bright emerald boundary');
+    expect(result.plan.steps[1].explanation).not.toBe('Show resulting union');
+
+    mockSend.mockRestore();
+  });
 });
+

@@ -187,7 +187,7 @@ export class AgentOrchestrator {
 
     // 1. Classify domain
     let domain: PedagogySpec['domain'] = 'general';
-    if (/(tangent|derivative|calculus|integral|curve|circle|geometry|triangle|vector|function|sine|cosine|math|algebra|matrix|tensor|parabola)/i.test(p)) {
+    if (/(tangent|derivative|calculus|integral|curve|circle|geometry|triangle|vector|function|sine|cosine|math|algebra|matrix|tensor|parabola|set|union|intersection|venn|subset|probability|logic|combinatorics|permutation|discrete|statistic)/i.test(p)) {
       domain = 'mathematics';
     } else if (/(tree|binary|sort|recursion|algorithm|graph|stack|queue|hash|search|array|linked\s*list|dynamic\s*programming|heap)/i.test(p)) {
       domain = 'algorithms';
@@ -201,6 +201,50 @@ export class AgentOrchestrator {
       .replace(/^(?:teach\s+me|explain|what\s+is|how\s+does|draw|show\s+me|visualize)\s+(?:about\s+|what\s+|how\s+)?/i, '')
       .replace(/[?!.]/g, '')
       .trim() || 'Concept Overview';
+
+    if (domain === 'mathematics' && /(set|union|intersection|venn|subset)/i.test(p)) {
+      return {
+        concept: 'Union and Operations in Set Theory',
+        domain: 'mathematics',
+        coreIntuition:
+          'A set is a collection of distinct elements. The Union of Set A and Set B (written A ∪ B) merges all items from both sets into a single collection—including anything in A, anything in B, or in both—without ever duplicating shared items.',
+        commonMisconceptions: [
+          'Double-counting elements in the intersection when calculating the union size (|A| + |B|)',
+          'Confusing Union (OR: elements in A, B, or both) with Intersection (AND: elements only in both)',
+          'Assuming disjoint sets cannot form a union',
+        ],
+        progressionStages: [
+          {
+            stageNumber: 1,
+            title: 'Visual Foundation: Two Overlapping Sets A & B',
+            objective: 'Draw the universal set frame and two overlapping Venn circles representing Set A and Set B with concrete member elements.',
+            narrationScript:
+              'Imagine you have two groups of things. Look at the board: we draw two overlapping circles inside our universe. Circle A on the left in cyan has items 1 and 2. Circle B on the right in violet has items 4 and 5. Right in the middle, where both circles overlap, is item 3, which belongs to both sets.',
+          },
+          {
+            stageNumber: 2,
+            title: 'Core Concept in Action: The Grand Union (A ∪ B)',
+            objective: 'Highlight the entire combined region across both circles to show all unique elements included together.',
+            narrationScript:
+              'Now, what is the Union, written A union B? The word union means bringing everything together. Look at the bright emerald boundary wrapping around both circles. Every single item—1, 2, 3, 4, and 5—now belongs to the Union. If an item belongs to A, or belongs to B, or belongs to both, it is welcomed into the Union.',
+          },
+          {
+            stageNumber: 3,
+            title: 'Comparative Contrast: The Double-Counting Trap vs Intersection',
+            objective: 'Contrast the full union with the narrow intersection and demonstrate why simply adding |A| + |B| produces a double-counting error.',
+            narrationScript:
+              'Here is the trap that catches almost every student: if Set A has 3 items (1, 2, 3) and Set B has 3 items (3, 4, 5), how many items are in their union? If you just add 3 plus 3, you get 6. But count the items on our board: 1, 2, 3, 4, 5. There are only 5 items! Why? Because item 3 was counted twice—once in A and once in B.',
+          },
+          {
+            stageNumber: 4,
+            title: 'Universal Invariant: Principle of Inclusion-Exclusion',
+            objective: 'Display the definitive formula card |A ∪ B| = |A| + |B| - |A ∩ B| and verify it with the concrete elements on the board.',
+            narrationScript:
+              'And that leads us to the universal rule of set theory: the Principle of Inclusion-Exclusion. The size of the union equals the size of A, plus the size of B, minus the intersection you double-counted. In our example: 3 plus 3 minus 1 equals 5. This elegant rule holds true for every set in mathematics.',
+          },
+        ],
+      };
+    }
 
     if (domain === 'mathematics' && /tangent/i.test(p)) {
       return {
@@ -442,6 +486,10 @@ export class AgentOrchestrator {
       return this.buildTangentSpatialBlueprint(origin, palette, pedagogy);
     }
 
+    if (pedagogy.domain === 'mathematics' && /(set|union|intersection|venn|subset)/i.test(pedagogy.concept)) {
+      return this.buildSetTheorySpatialBlueprint(origin, palette, pedagogy);
+    }
+
     if (pedagogy.domain === 'mathematics') {
       return this.buildMathSpatialBlueprint(origin, palette, pedagogy);
     }
@@ -531,6 +579,69 @@ export class AgentOrchestrator {
         { stepNumber: 2, title: pedagogy.progressionStages[1].title, explanation: pedagogy.progressionStages[1].narrationScript, elements: step2Elements },
         { stepNumber: 3, title: pedagogy.progressionStages[2].title, explanation: pedagogy.progressionStages[2].narrationScript, elements: step3Elements },
         { stepNumber: 4, title: pedagogy.progressionStages[3].title, explanation: pedagogy.progressionStages[3].narrationScript, elements: step4Elements },
+      ],
+    };
+  }
+
+  private buildSetTheorySpatialBlueprint(origin: Point, palette: any, pedagogy: PedagogySpec): SpatialBlueprint {
+    const cax = 370;
+    const cbx = 530;
+    const cy = 250;
+    const r = 115;
+
+    // Scene 1: Universal Set frame, Circle A (Cyan), Circle B (Violet), member elements 1,2 in A, 3 in overlap, 4,5 in B
+    const step1Elements: DrawingElement[] = [
+      // Universe frame
+      { id: 'univ_frame', type: 'rect', color: 'rgba(255, 255, 255, 0.2)', strokeWidth: 1.5, start: { x: 140, y: 80 }, width: 620, height: 340, text: 'Universal Set U' },
+      // Circle A (Cyan)
+      { id: 'circle_a', type: 'circle', color: palette.primary, strokeWidth: 3, start: { x: cax, y: cy }, radius: r, text: 'Set A = {1, 2, 3}' },
+      // Circle B (Violet)
+      { id: 'circle_b', type: 'circle', color: palette.accent, strokeWidth: 3, start: { x: cbx, y: cy }, radius: r, text: 'Set B = {3, 4, 5}' },
+      // Member elements in A only (left crescent)
+      { id: 'el_1', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: 310, y: 220 }, radius: 5, text: '• 1' },
+      { id: 'el_2', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: 320, y: 280 }, radius: 5, text: '• 2' },
+      // Member element in Intersection (middle overlap x=450)
+      { id: 'el_3', type: 'circle', color: palette.secondary, strokeWidth: 3, start: { x: 450, y: 250 }, radius: 6, text: '• 3' },
+      // Member elements in B only (right crescent)
+      { id: 'el_4', type: 'circle', color: palette.accent, strokeWidth: 2, start: { x: 580, y: 220 }, radius: 5, text: '• 4' },
+      { id: 'el_5', type: 'circle', color: palette.accent, strokeWidth: 2, start: { x: 590, y: 280 }, radius: 5, text: '• 5' },
+      // Title badge
+      { id: 'badge_1', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 160, y: 100 }, width: 280, height: 50, text: 'Two Overlapping Sets with Elements' },
+    ];
+
+    // Scene 2: The Grand Union A ∪ B (all unique elements merged)
+    const step2Elements: DrawingElement[] = [
+      ...step1Elements,
+      // Highlighted Union boundary envelope wrapping both circles
+      { id: 'union_envelope', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.08)', strokeWidth: 2.5, start: { x: 235, y: 120 }, width: 430, height: 260, text: 'Grand Union A ∪ B' },
+      // Result Card at bottom
+      { id: 'union_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.15)', strokeWidth: 2, start: { x: 250, y: 360 }, width: 400, height: 55, text: 'A ∪ B = {1, 2, 3, 4, 5} (5 unique items)' },
+    ];
+
+    // Scene 3: Comparative Contrast - Double-Counting Trap vs Intersection
+    const step3Elements: DrawingElement[] = [
+      ...step2Elements,
+      // Highlight intersection element 3 with warning coral ring
+      { id: 'warn_intersection_ring', type: 'circle', color: palette.highlight, strokeWidth: 3, start: { x: 450, y: 250 }, radius: 14 },
+      // Warning card at top right
+      { id: 'double_count_warning', type: 'rect', color: palette.highlight, fill: 'rgba(255, 85, 85, 0.12)', strokeWidth: 2, start: { x: 480, y: 45 }, width: 320, height: 60, text: 'Double-Counting Trap: 3 + 3 = 6 ≠ 5' },
+    ];
+
+    // Scene 4: Universal Invariant - Principle of Inclusion-Exclusion
+    const step4Elements: DrawingElement[] = [
+      ...step3Elements,
+      // Formula card
+      { id: 'formula_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.18)', strokeWidth: 2.5, start: { x: 200, y: 350 }, width: 500, height: 75, text: '|A ∪ B| = |A| + |B| - |A ∩ B| = 3 + 3 - 1 = 5' },
+    ];
+
+    return {
+      coordinateFrame: { origin, width: 900, height: 560, showAxes: false },
+      colorPalette: palette,
+      stepBlueprints: [
+        { stepNumber: 1, title: pedagogy.progressionStages[0]?.title || 'Foundation: Overlapping Sets', explanation: pedagogy.progressionStages[0]?.narrationScript || '', elements: step1Elements },
+        { stepNumber: 2, title: pedagogy.progressionStages[1]?.title || 'Core Operation: The Grand Union', explanation: pedagogy.progressionStages[1]?.narrationScript || '', elements: step2Elements },
+        { stepNumber: 3, title: pedagogy.progressionStages[2]?.title || 'Comparative Contrast: Double-Counting', explanation: pedagogy.progressionStages[2]?.narrationScript || '', elements: step3Elements },
+        { stepNumber: 4, title: pedagogy.progressionStages[3]?.title || 'Universal Invariant: Inclusion-Exclusion', explanation: pedagogy.progressionStages[3]?.narrationScript || '', elements: step4Elements },
       ],
     };
   }
@@ -725,36 +836,36 @@ export class AgentOrchestrator {
 
     // Scene 1: Baseline Entities & Context Setup
     const step1: DrawingElement[] = [
-      { id: 'box_a', type: 'rect', color: palette.primary, strokeWidth: 2.5, start: { x: cx - 250, y: cy - 70 }, width: 200, height: 130, text: 'Core Foundation' },
-      { id: 'box_b', type: 'rect', color: palette.secondary, strokeWidth: 2.5, start: { x: cx + 50, y: cy - 70 }, width: 200, height: 130, text: 'Interacting Subject' },
-      { id: 'badge_title', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 100, y: 50 }, width: 270, height: 50, text: `${pedagogy.concept}: Foundation` },
+      { id: 'box_a', type: 'rect', color: palette.primary, strokeWidth: 2.5, start: { x: cx - 250, y: cy - 70 }, width: 200, height: 130, text: `${pedagogy.concept}: Primary Actor` },
+      { id: 'box_b', type: 'rect', color: palette.secondary, strokeWidth: 2.5, start: { x: cx + 50, y: cy - 70 }, width: 200, height: 130, text: `${pedagogy.concept}: Target Context` },
+      { id: 'badge_title', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 100, y: 50 }, width: 280, height: 50, text: `${pedagogy.concept}: Setup` },
     ];
 
     // Scene 2: The Core Mechanism in Action
     const step2: DrawingElement[] = [
       ...step1,
-      { id: 'flow_arrow', type: 'arrow', color: palette.accent, strokeWidth: 3.5, start: { x: cx - 50, y: cy - 5 }, end: { x: cx + 50, y: cy - 5 }, text: 'Primary Operation' },
-      { id: 'center_hub', type: 'circle', color: palette.highlight, strokeWidth: 3, start: { x: cx, y: cy + 100 }, radius: 50, text: 'Mechanism' },
+      { id: 'flow_arrow', type: 'arrow', color: palette.accent, strokeWidth: 3.5, start: { x: cx - 50, y: cy - 5 }, end: { x: cx + 50, y: cy - 5 }, text: 'Active Transformation' },
+      { id: 'center_hub', type: 'circle', color: palette.highlight, strokeWidth: 3, start: { x: cx, y: cy + 100 }, radius: 50, text: 'Core Operation' },
     ];
 
     // Scene 3: Critical Contrast & Counterexamples
     const step3: DrawingElement[] = [
       ...step2,
-      { id: 'contrast_arrow', type: 'arrow', color: palette.auxiliary, strokeWidth: 2, start: { x: cx - 150, y: cy + 60 }, end: { x: cx - 50, y: cy + 100 }, text: 'Alternative Path' },
-      { id: 'misconception_card', type: 'rect', color: palette.highlight, fill: 'rgba(255, 85, 85, 0.1)', strokeWidth: 1.5, start: { x: 530, y: 50 }, width: 270, height: 60, text: 'Common Misconception Busted' },
+      { id: 'contrast_arrow', type: 'arrow', color: palette.auxiliary, strokeWidth: 2, start: { x: cx - 150, y: cy + 60 }, end: { x: cx - 50, y: cy + 100 }, text: 'Contrast State' },
+      { id: 'misconception_card', type: 'rect', color: palette.highlight, fill: 'rgba(255, 85, 85, 0.1)', strokeWidth: 1.5, start: { x: 530, y: 50 }, width: 280, height: 60, text: 'Misconception Clarified' },
     ];
 
     // Scene 4: Definitive Takeaway Rule Card
     const step4: DrawingElement[] = [
       ...step3,
-      { id: 'summary_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.15)', strokeWidth: 2, start: { x: cx - 220, y: 350 }, width: 440, height: 75, text: `Key Principle: Remember this rule for ${pedagogy.concept}` },
+      { id: 'summary_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.15)', strokeWidth: 2, start: { x: cx - 220, y: 350 }, width: 440, height: 75, text: `Key Principle: Core Invariant for ${pedagogy.concept}` },
     ];
 
     return {
       coordinateFrame: { origin, width: 900, height: 560, showAxes: false },
       colorPalette: palette,
       stepBlueprints: [
-        { stepNumber: 1, title: pedagogy.progressionStages[0]?.title || 'Foundation', explanation: pedagogy.progressionStages[0]?.narrationScript || '', elements: step1 },
+        { stepNumber: 1, title: pedagogy.progressionStages[0]?.title || 'Visual Foundation', explanation: pedagogy.progressionStages[0]?.narrationScript || '', elements: step1 },
         { stepNumber: 2, title: pedagogy.progressionStages[1]?.title || 'Core Mechanism', explanation: pedagogy.progressionStages[1]?.narrationScript || '', elements: step2 },
         { stepNumber: 3, title: pedagogy.progressionStages[2]?.title || 'Critical Contrast', explanation: pedagogy.progressionStages[2]?.narrationScript || '', elements: step3 },
         { stepNumber: 4, title: pedagogy.progressionStages[3]?.title || 'Definitive Takeaway', explanation: pedagogy.progressionStages[3]?.narrationScript || '', elements: step4 },
@@ -768,7 +879,7 @@ export class AgentOrchestrator {
   public synthesizeDrawingPrompt(rawPrompt: string, pedagogy: PedagogySpec, spatial: SpatialBlueprint): string {
     const layoutOverview = spatial.stepBlueprints
       .map(
-        (s) => `Step ${s.stepNumber} [${s.title}]: ${s.elements.length} geometric entities planned (${s.elements.map((e) => e.type).join(', ')})`
+        (s) => `Step ${s.stepNumber} [${s.title}]:\n  Visual Focal Points: ${s.elements.map((e) => e.id + (e.text ? ` ("${e.text}")` : '')).join(', ')}`
       )
       .join('\n');
 
@@ -780,7 +891,7 @@ IDENTIFIED DOMAIN: ${pedagogy.domain.toUpperCase()}
 CORE MENTAL MODEL: ${pedagogy.coreIntuition}
 
 UNIVERSAL 4-SCENE CONTINUOUS WHITEBOARD PEDAGOGY:
-${pedagogy.progressionStages.map((p) => `Scene ${p.stageNumber} [${p.title}]:\n  - Objective: ${p.objective}\n  - Audio Script: "${p.narrationScript}"`).join('\n\n')}
+${pedagogy.progressionStages.map((p) => `Scene ${p.stageNumber} [${p.title}]:\n  - Objective: ${p.objective}\n  - Teacher Voice Script: "${p.narrationScript}"`).join('\n\n')}
 
 SPATIAL BLUEPRINT CONSTRAINTS (Canvas 900x560):
 - Origin: (${spatial.coordinateFrame.origin.x}, ${spatial.coordinateFrame.origin.y})
@@ -788,17 +899,22 @@ SPATIAL BLUEPRINT CONSTRAINTS (Canvas 900x560):
 - Planned Layout Sequence:
 ${layoutOverview}
 
-INSTRUCTIONS FOR DRAWING AGENT:
-1. Deliver a brilliant, crystal-clear visual explanation following this exact 4-scene progressive build for the concept:
-   - Scene 1: Foundational Visual Anchor (establish base shape/context first before transformations)
-   - Scene 2: Core Concept in Action (draw the primary active entity touching or transforming the foundation)
-   - Scene 3: Critical Contrast & Misconceptions (juxtapose against counterexamples or alternative states)
-   - Scene 4: Universal Invariant, Formula Card & Definitive Takeaway (equation, rule card, physical summary)
-2. Retain earlier foundational elements across scenes so the drawing builds up continuously like a real video stream without clearing past work.
-3. Output your reasoning in a <reasoning> block detailing your mathematical/spatial choices.
-4. Write clean, natural spoken scripts for each step in Markdown headers (### Step 1: ..., ### Step 2: ...).
-5. Output a verified, executable \`\`\`json block adhering to the spatial coordinate layout.
-Every step MUST contain geometric elements ("rect", "circle", "line", "arrow", "path", "text") with explicit coordinates, colors, and concise text labels.`;
+INSTRUCTIONS FOR DRAWING AGENT & VOICE TEACHER:
+1. DELIVER A MASTER-TEACHER LESSON:
+   Your spoken narration (both in Markdown headers ### Step X: and in the JSON "explanation" field) MUST BE LITERALLY WHAT A MASTER TEACHER (like 3Blue1Brown or Feynman) SPEAKS ALOUD DIRECTLY TO A STUDENT at the blackboard.
+   - Speak in the warm, conversational second person: "Look at the board: we start with...", "Notice what happens when...", "Why does this matter? Because...".
+   - NEVER use robotic developer engineering commands (like "Establish Set A...", "Show resulting union...").
+   - Do NOT worry about video or narration length: make each step's spoken explanation as rich, complete, and thorough as necessary to genuinely teach the concept.
+2. DRAW MEANINGFUL CONCRETE FIGURES:
+   Every shape drawn MUST have mathematical and visual integrity:
+   - For Set Theory: ALWAYS draw overlapping Venn circles with member elements inside (e.g., • 1, • 2 in Set A, • 3 in the overlap intersection, • 4, • 5 in Set B), an envelope highlighting the union, a double-counting warning, and the inclusion-exclusion formula card. NEVER draw abstract empty boxes or zero-width collapsed lines!
+   - For Math: Real coordinate axes, curves, tangent lines touching at one point P, secants, slope triangles, right angles.
+   - For Physics: Reference planes, masses, force vector arrows (applied, friction, weight, normal), acceleration, Newton cards.
+   - For Systems/Algorithms: Real service nodes, protocol labels, array cells, binary trees with keys.
+3. RETAIN FOUNDATIONAL ELEMENTS ACROSS SCENES:
+   The whiteboard is a continuous streamed video. Elements from earlier scenes must persist so the drawing builds up organically without canvas wipes.
+4. Output your reasoning in a <reasoning> block detailing your pedagogical choices.
+5. In your \`\`\`json block, provide the 4 progressive steps with explicit coordinates ("rect", "circle", "line", "arrow", "path", "text") matching the canvas layout, and the full spoken teacher script in "explanation".`;
   }
 
   // =========================================================================
@@ -817,6 +933,18 @@ Every step MUST contain geometric elements ("rect", "circle", "line", "arrow", "
       };
     }
 
+    // Extract rich teacher speech from Markdown step headers if present
+    const stepMarkdownMap = new Map<number, string>();
+    const stepHeaderRegex = /###\s+Step\s+(\d+)[:\s]+[^\n]*\n+([\s\S]*?)(?=(?:###\s+Step\s+\d+|```|<reasoning|$))/gi;
+    let headerMatch: RegExpExecArray | null;
+    while ((headerMatch = stepHeaderRegex.exec(response)) !== null) {
+      const stepNum = parseInt(headerMatch[1], 10);
+      const text = headerMatch[2].trim();
+      if (text && text.length > 15) {
+        stepMarkdownMap.set(stepNum, text);
+      }
+    }
+
     const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonMatch) {
       try {
@@ -824,12 +952,26 @@ Every step MUST contain geometric elements ("rect", "circle", "line", "arrow", "
         const parsed = JSON.parse(rawJson);
         const stepsList = Array.isArray(parsed) ? parsed : parsed.steps || [];
         if (stepsList.length > 0) {
-          const steps: BlackboardStep[] = stepsList.map((s: any, idx: number) => ({
-            step: s.step || idx + 1,
-            title: s.title || `Step ${idx + 1}`,
-            explanation: s.explanation || s.description || '',
-            elements: (s.elements && s.elements.length > 0) ? s.elements : fallbackSpatial.stepBlueprints[idx]?.elements || [],
-          }));
+          const steps: BlackboardStep[] = stepsList.map((s: any, idx: number) => {
+            const stepNum = s.step || idx + 1;
+            const mdSpeech = stepMarkdownMap.get(stepNum);
+            // Detect if JSON explanation is a developer imperative or too short
+            const isJsonRobotic = /^(establish|present|show|create|draw|display|render)\s+/i.test(s.explanation || '');
+            let explanation = s.explanation || s.description || '';
+            if (mdSpeech && (isJsonRobotic || mdSpeech.length > explanation.length)) {
+              explanation = mdSpeech;
+            }
+            if (!explanation && fallbackSpatial.stepBlueprints[idx]?.explanation) {
+              explanation = fallbackSpatial.stepBlueprints[idx].explanation;
+            }
+
+            return {
+              step: stepNum,
+              title: s.title || fallbackSpatial.stepBlueprints[idx]?.title || `Step ${stepNum}`,
+              explanation,
+              elements: (s.elements && s.elements.length > 0) ? s.elements : fallbackSpatial.stepBlueprints[idx]?.elements || [],
+            };
+          });
 
           return {
             steps,
