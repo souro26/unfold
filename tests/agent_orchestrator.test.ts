@@ -404,6 +404,31 @@ Now, look at the bright emerald boundary wrapping around both circles. Every sin
     // Summary card should be pushed down into Footer Zone (y >= 400)
     expect(card?.start?.y).toBeGreaterThanOrEqual(400);
   });
+
+  it('Layer 1 & 2: Accurately classifies Python function requests as software/algorithms and builds reusable machine blueprint', () => {
+    const pyPedagogy = orchestrator.deconstructPedagogy('what is a function in python? what does it do? just the basics please');
+
+    // Should NOT be classified as calculus geometry
+    expect(pyPedagogy.domain).toBe('algorithms');
+    expect(pyPedagogy.concept).toContain('Function');
+    expect(pyPedagogy.coreIntuition).toContain('reusable machine');
+    expect(pyPedagogy.coreIntuition).not.toContain('tangent');
+    expect(pyPedagogy.coreIntuition).not.toContain('secant');
+
+    // Verify milestones: Machine Mental Model -> Python def Syntax -> Reusability Contrast -> Execution Lifecycle
+    expect(pyPedagogy.progressionStages[0].title).toContain('Machine');
+    expect(pyPedagogy.progressionStages[1].title).toContain('Syntax');
+    expect(pyPedagogy.progressionStages[2].title).toContain('Contrast');
+    expect(pyPedagogy.progressionStages[3].title).toContain('Takeaway');
+
+    // Verify Spatial Blueprint: Input hopper (left), Function machine (center), Output tray (right)
+    const blueprint = orchestrator.architectSpatialBlueprint(pyPedagogy);
+    expect(blueprint.stepBlueprints.length).toBe(4);
+    const step1 = blueprint.stepBlueprints[0].elements;
+    expect(step1.some((e) => e.id === 'input_hopper')).toBe(true);
+    expect(step1.some((e) => e.id === 'function_box')).toBe(true);
+    expect(step1.some((e) => e.id === 'output_tray')).toBe(true);
+  });
 });
 
 

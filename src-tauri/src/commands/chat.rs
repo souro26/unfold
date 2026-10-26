@@ -538,10 +538,24 @@ pub async fn synthesize_speech(
         .map_err(|e| format!("Failed to read settings: {}", e))?
         .clone();
 
-    let api_key = settings.api_key.ok_or_else(|| "No API key configured for speech synthesis".to_string())?;
-    let tts_model = settings
-        .tts_model
-        .unwrap_or_else(|| "nvidia/magpie-tts-zeroshot".to_string());
+    let api_key = settings.api_key.as_ref().ok_or_else(|| "No API key configured for speech synthesis".to_string())?.clone();
+    let is_openai = settings.tts_provider.as_deref() == Some("openai")
+        || settings.llm_provider == "openai"
+        || api_key.starts_with("sk-");
+
+    let endpoint = if is_openai {
+        "https://api.openai.com/v1/audio/speech"
+    } else {
+        "https://integrate.api.nvidia.com/v1/audio/speech"
+    };
+
+    let default_model = if is_openai {
+        "tts-1".to_string()
+    } else {
+        "nvidia/magpie-tts-zeroshot".to_string()
+    };
+
+    let tts_model = settings.tts_model.unwrap_or(default_model);
 
     let client = reqwest::Client::new();
     let payload = serde_json::json!({
@@ -552,7 +566,7 @@ pub async fn synthesize_speech(
     });
 
     let resp = client
-        .post("https://integrate.api.nvidia.com/v1/audio/speech")
+        .post(endpoint)
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&payload)
@@ -561,8 +575,9 @@ pub async fn synthesize_speech(
         .map_err(|e| format!("TTS network error: {}", e))?;
 
     if !resp.status().is_success() {
+        let status = resp.status();
         let err_text = resp.text().await.unwrap_or_default();
-        return Err(format!("NVIDIA TTS error: {}", err_text));
+        return Err(format!("Neural TTS error ({}): {}", status, err_text));
     }
 
     let bytes = resp.bytes().await.map_err(|e| format!("Failed to read TTS audio: {}", e))?;

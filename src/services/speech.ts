@@ -23,6 +23,14 @@ export class SpeechService {
   private static selectedLang: string = 'en-US';
   private static currentAudio: HTMLAudioElement | null = null;
 
+  static {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        SpeechService.selectedVoice = SpeechService.getBestVoiceForLang(SpeechService.selectedLang);
+      };
+    }
+  }
+
   public static readonly SUPPORTED_LANGUAGES: SpeechLanguage[] = [
     { code: 'en-US', name: 'English (US)', nativeName: 'English' },
     { code: 'en-GB', name: 'English (UK)', nativeName: 'English' },
@@ -49,6 +57,28 @@ export class SpeechService {
     return this.SUPPORTED_LANGUAGES;
   }
 
+  static getBestVoiceForLang(langCode: string): SpeechSynthesisVoice | null {
+    const voices = this.getVoices();
+    if (voices.length === 0) return null;
+    const langPrefix = langCode.split('-')[0].toLowerCase();
+    const matching = voices.filter(
+      (v) => v.lang.toLowerCase() === langCode.toLowerCase() || v.lang.toLowerCase().startsWith(langPrefix)
+    );
+    if (matching.length === 0) return voices[0] || null;
+
+    // Prioritize natural/neural voices over legacy robotic SAPI5 desktop voices
+    const natural = matching.find((v) => /natural|neural|online/i.test(v.name));
+    if (natural) return natural;
+
+    const google = matching.find((v) => /google/i.test(v.name));
+    if (google) return google;
+
+    const nonDesktop = matching.find((v) => !/desktop/i.test(v.name));
+    if (nonDesktop) return nonDesktop;
+
+    return matching[0];
+  }
+
   static setVoice(voiceName: string): void {
     const voices = this.getVoices();
     const found = voices.find((v) => v.name === voiceName || v.lang.startsWith(voiceName));
@@ -60,12 +90,7 @@ export class SpeechService {
 
   static setLanguage(langCode: string): void {
     this.selectedLang = langCode;
-    const voices = this.getVoices();
-    // Find best matching voice for this language
-    const langPrefix = langCode.split('-')[0].toLowerCase();
-    const exactMatch = voices.find((v) => v.lang.toLowerCase() === langCode.toLowerCase());
-    const prefixMatch = voices.find((v) => v.lang.toLowerCase().startsWith(langPrefix));
-    this.selectedVoice = exactMatch || prefixMatch || null;
+    this.selectedVoice = this.getBestVoiceForLang(langCode);
   }
 
   static getCurrentLanguage(): string {
@@ -121,7 +146,11 @@ export class SpeechService {
     // 1. Try NVIDIA Neural TTS if enabled & configured
     try {
       const settings = await getSettings();
-      if (settings.tts_provider !== 'system' && settings.api_key && settings.llm_provider === 'nvidia') {
+      const isNeuralConfigured = settings.tts_provider !== 'system' && (
+        (settings.api_key && (settings.llm_provider === 'nvidia' || settings.llm_provider === 'openai' || settings.tts_provider === 'openai')) ||
+        settings.tts_provider === 'custom'
+      );
+      if (isNeuralConfigured) {
         const audioData = await invoke<string>('synthesize_speech', {
           text: cleanText,
           voice: options.voiceName || 'alloy',
@@ -160,15 +189,14 @@ export class SpeechService {
     const targetLang = options.lang || this.selectedLang || this.detectLanguage(cleanText);
     utterance.lang = targetLang;
 
-    if (this.selectedVoice && this.selectedVoice.lang.toLowerCase().startsWith(targetLang.split('-')[0].toLowerCase())) {
-      utterance.voice = this.selectedVoice;
-    } else if (options.voiceName) {
+    if (options.voiceName) {
       const v = this.getVoices().find((voice) => voice.name === options.voiceName);
       if (v) utterance.voice = v;
+    } else if (this.selectedVoice && this.selectedVoice.lang.toLowerCase().startsWith(targetLang.split('-')[0].toLowerCase())) {
+      utterance.voice = this.selectedVoice;
     } else {
-      const prefix = targetLang.split('-')[0].toLowerCase();
-      const match = this.getVoices().find((v) => v.lang.toLowerCase().startsWith(prefix));
-      if (match) utterance.voice = match;
+      const best = this.getBestVoiceForLang(targetLang);
+      if (best) utterance.voice = best;
     }
 
     if (options.onStart) utterance.onstart = () => options.onStart!();

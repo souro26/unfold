@@ -2,6 +2,7 @@ import { BlackboardStep, Point, DrawingElement } from '../types';
 import { SpeechService } from '../services/speech';
 import { SkiaRenderer } from '../renderer-skia';
 import { RoughRenderer } from '../renderer-rough';
+import { MotionVectorRenderer } from '../renderer-motion';
 import { ExportService } from '../services/export';
 import { PluginManager } from '../services/PluginManager';
 import { StylusService, StylusCurveProfile } from '../services/stylus';
@@ -29,11 +30,12 @@ export class BlackboardView {
   private titleEl: HTMLElement;
   private descEl: HTMLElement;
 
-  // Render Engine (Rough.js Chalkboard primary, Skia / 2D fallback)
+  // Render Engine (MotionVectorRenderer primary, Rough.js chalkboard & Skia secondary)
+  private motionRenderer: MotionVectorRenderer;
   private roughRenderer: RoughRenderer;
   private renderModeBtn: HTMLButtonElement | null = null;
   private renderModeLabel: HTMLElement | null = null;
-  private renderEngine: 'rough' | 'skia' = 'rough';
+  private renderEngine: 'motion' | 'rough' | 'skia' = 'motion';
 
   // Video Stream Player Elements
   private videoStreamBar: HTMLElement | null = null;
@@ -201,7 +203,17 @@ export class BlackboardView {
       this.ctx = this.canvasEl.getContext('2d');
     }
 
-    // Initialize RoughRenderer as Primary chalk engine
+    // Initialize MotionVectorRenderer as Primary educational video motion engine
+    this.motionRenderer = new MotionVectorRenderer();
+    if (this.canvasEl) {
+      this.motionRenderer.attach(this.canvasEl);
+    }
+    this.motionRenderer.onRenderError = () => {
+      console.warn('MotionVectorRenderer failed, falling back to 2D');
+      this.drawCanvas2D();
+    };
+
+    // Initialize RoughRenderer as secondary chalk engine
     this.roughRenderer = new RoughRenderer();
     if (this.canvasEl) {
       this.roughRenderer.attach(this.canvasEl);
@@ -426,102 +438,10 @@ export class BlackboardView {
 
   private setupStylusListeners(): void {
     if (!this.canvasEl) return;
-
-    this.canvasEl.style.touchAction = 'none';
-
-    this.canvasEl.addEventListener('pointerdown', (e: PointerEvent) => {
-      if (e.button !== 0 && e.pointerType === 'mouse') return;
-
-      const rect = this.canvasEl.getBoundingClientRect();
-      const rawX = e.clientX - rect.left;
-      const rawY = e.clientY - rect.top;
-      const cx = this.canvasEl.width / 2;
-      const cy = this.canvasEl.height / 2;
-      const pt = this.screenToCanvas(rawX, rawY, cx, cy);
-
-      const pressure = e.pressure !== undefined && e.pressure > 0 ? e.pressure : (e.pointerType === 'pen' ? 0.35 : 0.5);
-      const point: Point = {
-        x: pt.x,
-        y: pt.y,
-        pressure,
-        tiltX: e.tiltX,
-        tiltY: e.tiltY,
-      };
-
-      this.isDrawing = true;
-      this.activeStroke = [point];
-
-      try {
-        if (typeof this.canvasEl.setPointerCapture === 'function') {
-          this.canvasEl.setPointerCapture(e.pointerId);
-        }
-      } catch {}
-    });
-
-    this.canvasEl.addEventListener('pointermove', (e: PointerEvent) => {
-      if (!this.isDrawing || !this.activeStroke) return;
-
-      const rect = this.canvasEl.getBoundingClientRect();
-      const rawX = e.clientX - rect.left;
-      const rawY = e.clientY - rect.top;
-      const cx = this.canvasEl.width / 2;
-      const cy = this.canvasEl.height / 2;
-      const pt = this.screenToCanvas(rawX, rawY, cx, cy);
-
-      const pressure = e.pressure !== undefined && e.pressure > 0 ? e.pressure : (e.pointerType === 'pen' ? 0.35 : 0.5);
-      const point: Point = {
-        x: pt.x,
-        y: pt.y,
-        pressure,
-        tiltX: e.tiltX,
-        tiltY: e.tiltY,
-      };
-
-      this.activeStroke.push(point);
-      this.drawCanvas();
-    });
-
-    const endStroke = (e: PointerEvent) => {
-      if (!this.isDrawing) return;
-      this.isDrawing = false;
-
-      if (this.activeStroke && this.activeStroke.length > 1) {
-        const smoothed = this.stylusService.smoothPoints(this.activeStroke);
-        const newElement: DrawingElement = {
-          id: `pen_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          type: 'pen',
-          color: '#00f0ff',
-          strokeWidth: 3,
-          points: smoothed,
-        };
-
-        if (this.currentSteps.length > 0) {
-          const step = this.currentSteps[this.currentStepIndex];
-          if (!step.elements) step.elements = [];
-          step.elements.push(newElement);
-        } else {
-          this.currentSteps = [{
-            step: 1,
-            title: 'Blackboard Sketch',
-            explanation: 'Freehand drawings and notes on the blackboard canvas.',
-            elements: [newElement],
-          }];
-          this.currentStepIndex = 0;
-          this.renderCurrentStep();
-        }
-      }
-
-      this.activeStroke = null;
-      try {
-        if (typeof this.canvasEl.releasePointerCapture === 'function') {
-          this.canvasEl.releasePointerCapture(e.pointerId);
-        }
-      } catch {}
-      this.drawCanvas();
-    };
-
-    this.canvasEl.addEventListener('pointerup', endStroke);
-    this.canvasEl.addEventListener('pointercancel', endStroke);
+    // User freehand drawing is disabled by design. The canvas is strictly an automated whiteboard animation player.
+    this.canvasEl.style.touchAction = 'pan-x pan-y';
+    this.isDrawing = false;
+    this.activeStroke = null;
   }
 
   public screenToCanvas(screenX: number, screenY: number, cx: number, cy: number): { x: number; y: number } {
@@ -598,13 +518,21 @@ export class BlackboardView {
   }
 
   public toggleRenderEngine(): void {
-    this.setRenderEngine(this.renderEngine === 'rough' ? 'skia' : 'rough');
+    if (this.renderEngine === 'motion') {
+      this.setRenderEngine('rough');
+    } else if (this.renderEngine === 'rough') {
+      this.setRenderEngine('skia');
+    } else {
+      this.setRenderEngine('motion');
+    }
   }
 
-  public setRenderEngine(engine: 'rough' | 'skia'): void {
+  public setRenderEngine(engine: 'motion' | 'rough' | 'skia'): void {
     this.renderEngine = engine;
     if (this.renderModeLabel) {
-      if (engine === 'rough') {
+      if (engine === 'motion') {
+        this.renderModeLabel.textContent = '🎬 Motion Video';
+      } else if (engine === 'rough') {
         this.renderModeLabel.textContent = '🎨 Chalkboard';
       } else {
         this.renderModeLabel.textContent = '📐 Precision';
@@ -613,7 +541,7 @@ export class BlackboardView {
     this.drawCanvas();
   }
 
-  public getRenderEngine(): 'rough' | 'skia' {
+  public getRenderEngine(): 'motion' | 'rough' | 'skia' {
     return this.renderEngine;
   }
 
@@ -661,6 +589,7 @@ export class BlackboardView {
     this.videoStreamBar?.classList.add('hidden');
     this.exitPresentationMode();
     this.closeInspectDrawer();
+    this.motionRenderer.stopAnimation();
     this.roughRenderer.stopAnimation();
     this.skiaRenderer.destroy();
     this.overlayEl?.classList.remove('visible');
@@ -869,13 +798,19 @@ export class BlackboardView {
 
     const accumulatedStep = this.getAccumulatedStep(this.currentStepIndex);
 
-    // Primary: Rough.js organic chalk sketching animation
+    // Primary: Motion Vector Animation Engine (YouTube Explainer style)
+    if (this.renderEngine === 'motion') {
+      this.motionRenderer.animateStep(accumulatedStep, 600, this.viewport);
+      return;
+    }
+
+    // Secondary: Rough.js organic chalk sketching animation
     if (this.renderEngine === 'rough') {
       this.roughRenderer.animateStep(accumulatedStep, 450, this.viewport);
       return;
     }
 
-    // Fallback 1: Skia GPU
+    // Secondary 2: Skia GPU
     if (this.skiaRenderer.hasSurface()) {
       try {
         this.skiaRenderer.animateStep(accumulatedStep, 450);
@@ -885,7 +820,7 @@ export class BlackboardView {
       }
     }
 
-    // Fallback 2: Canvas 2D
+    // Fallback: Canvas 2D
     this.drawCanvas();
   }
 
@@ -897,12 +832,21 @@ export class BlackboardView {
 
     const step = this.getAccumulatedStep(this.currentStepIndex);
 
-    // Primary: Rough.js Chalkboard engine
+    // Primary: Motion Vector Engine
+    if (this.renderEngine === 'motion') {
+      try {
+        const rendered = this.motionRenderer.renderStep(step, this.viewport);
+        if (rendered) return;
+      } catch (err) {
+        console.warn('MotionVectorRenderer renderStep failed, falling back:', err);
+      }
+    }
+
+    // Secondary: Rough.js Chalkboard engine
     if (this.renderEngine === 'rough') {
       try {
         const rendered = this.roughRenderer.renderStep(step, this.viewport);
         if (rendered) {
-          this.drawActiveStylusStroke();
           return;
         }
       } catch (err) {
@@ -922,33 +866,6 @@ export class BlackboardView {
 
     // Fallback 2: HTML5 2D Canvas
     this.drawCanvas2D();
-  }
-
-  private drawActiveStylusStroke(): void {
-    if (!this.ctx || !this.canvasEl || !this.activeStroke || this.activeStroke.length <= 1) return;
-    this.ctx.save();
-    const cx = this.canvasEl.width / 2;
-    const cy = this.canvasEl.height / 2;
-    this.ctx.translate(cx + this.viewport.panX, cy + this.viewport.panY);
-    this.ctx.rotate(this.viewport.rotation);
-    this.ctx.scale(this.viewport.zoom, this.viewport.zoom);
-    this.ctx.translate(-cx, -cy);
-
-    for (let i = 0; i < this.activeStroke.length - 1; i++) {
-      const p1 = this.activeStroke[i];
-      const p2 = this.activeStroke[i + 1];
-      const metrics = this.stylusService.calculateStrokeMetrics(p1, 3);
-      this.ctx.save();
-      this.ctx.beginPath();
-      this.ctx.lineWidth = metrics.width;
-      this.ctx.globalAlpha = metrics.opacity;
-      this.ctx.strokeStyle = '#00f0ff';
-      this.ctx.moveTo(p1.x, p1.y);
-      this.ctx.lineTo(p2.x, p2.y);
-      this.ctx.stroke();
-      this.ctx.restore();
-    }
-    this.ctx.restore();
   }
 
   public drawCanvas2D(): void {

@@ -249,7 +249,11 @@ export class AgentOrchestrator {
 
     // 1. Classify domain
     let domain: PedagogySpec['domain'] = 'general';
-    if (/(tangent|derivative|calculus|integral|curve|circle|geometry|triangle|vector|function|sine|cosine|math|algebra|matrix|tensor|parabola|set|union|intersection|venn|subset|probability|logic|combinatorics|permutation|discrete|statistic)/i.test(p)) {
+    const isSoftware = /(python|javascript|typescript|rust|golang|c\+\+|java\b|code|coding|software|program|script|function\s+in|def\s+|variable|parameter|argument|return\s+value|for\s+loop|while\s+loop|class\s+|object|method)/i.test(p);
+
+    if (isSoftware) {
+      domain = 'algorithms';
+    } else if (/(tangent|derivative|calculus|integral|curve|circle|geometry|triangle|vector|sine|cosine|math|algebra|matrix|tensor|parabola|set|union|intersection|venn|subset|probability|logic|combinatorics|permutation|discrete|statistic)/i.test(p)) {
       domain = 'mathematics';
     } else if (/(tree|binary|sort|recursion|algorithm|graph|stack|queue|hash|search|array|linked\s*list|dynamic\s*programming|heap)/i.test(p)) {
       domain = 'algorithms';
@@ -263,6 +267,52 @@ export class AgentOrchestrator {
       .replace(/^(?:teach\s+me|explain|what\s+is|how\s+does|draw|show\s+me|visualize)\s+(?:about\s+|what\s+|how\s+)?/i, '')
       .replace(/[?!.]/g, '')
       .trim() || 'Concept Overview';
+
+    // Dedicated Software / Programming Function Pedagogy
+    if (isSoftware && /(function|def\s+|method|routine)/i.test(p)) {
+      return {
+        concept: followUpType === 'simpler' ? 'Functions in Programming (Simple Intuition)' : (/(python)/i.test(p) ? 'Functions in Python' : 'Functions in Programming'),
+        domain: 'algorithms',
+        coreIntuition: followUpType === 'simpler'
+          ? 'Imagine a magic bread-toaster: you drop in raw bread (arguments), the machine toasts it inside (function body), and out pops warm toast (return value). You can use that same toaster again and again.'
+          : 'A function is a named, reusable machine in programming. It takes input arguments, executes structured logic inside its isolated body, and optionally returns a computed result, avoiding repetitive code.',
+        commonMisconceptions: [
+          'Confusing function definition (def) with function execution/call (parentheses () )',
+          'Assuming a function without a return statement produces an error (it returns None in Python)',
+          'Confusing parameters (placeholder names in definition) with arguments (actual values passed during call)',
+        ],
+        progressionStages: [
+          {
+            stageNumber: 1,
+            title: 'Visual Foundation: The Reusable Machine (Input → Process → Output)',
+            objective: 'Draw the Input Arguments hopper on the left, the central Function Box, and the Output Result tray on the right.',
+            narrationScript:
+              'Welcome! Think of a function like a specialized kitchen machine. You feed raw ingredients into the input slot on the left, something specific happens inside the box, and a finished product comes out of the output chute. Let us look at our board: on the left are our input arguments, in the center is our function machine, and on the right is our returned result.',
+          },
+          {
+            stageNumber: 2,
+            title: 'Core Mechanism: Python def Syntax & Execution Flow',
+            objective: 'Trace the parameter binding, indented body execution, and return statement ejecting the result.',
+            narrationScript:
+              'Now, how do we write this in Python? We use the keyword def, which stands for define. Then we name it, like calculate, followed by parentheses holding our parameters. Look at the arrow in the center: incoming arguments flow inside, the indented body runs line by line, and the return statement delivers the result back to whoever asked for it.',
+          },
+          {
+            stageNumber: 3,
+            title: 'Critical Contrast: Reusable Function vs 50x Copy-Paste Duplication',
+            objective: 'Contrast the clean modular function call against repetitive, bug-prone copy-paste spaghetti code.',
+            narrationScript:
+              'Why do functions matter so much? Look at the contrast badge at the top right: imagine having to write the exact same 15 lines of code every single time you need to compute a value! If you make one mistake, you have to fix it in fifty places. With a function, you write the logic once, and call it anywhere: f(10), f(50). Infinite reuse, zero duplication.',
+          },
+          {
+            stageNumber: 4,
+            title: 'Definitive Takeaway: Lifecycle & Return Value Invariant',
+            objective: 'Display the summary card with the universal execution rule: Arguments In → Logic Executes → Return Value Out.',
+            narrationScript:
+              'And here is your definitive golden rule: A function packages inputs, operations, and outputs into a single reliable building block. Remember: if you do not write an explicit return statement, Python automatically hands back None. Functions turn chaotic code into clean, modular lego bricks!',
+          },
+        ],
+      };
+    }
 
     // Set Theory: Specifically Intersection
     if (domain === 'mathematics' && /(intersection|overlap|shared)/i.test(p) && !/union/i.test(cleanPrompt)) {
@@ -399,7 +449,7 @@ export class AgentOrchestrator {
       };
     }
 
-    if (domain === 'mathematics') {
+    if (domain === 'mathematics' && /(tangent|derivative|calculus|secant|slope|rate\s+of\s+change)/i.test(p)) {
       return {
         concept: topic,
         domain: 'mathematics',
@@ -432,6 +482,41 @@ export class AgentOrchestrator {
             title: 'Universal Invariant & Formula Card',
             objective: 'Demonstrate perpendicularity (90° right angle), physical velocity vector, and the fundamental limit equation.',
             narrationScript: `Here is the definitive takeaway: the tangent is strictly perpendicular to the normal radius, yielding the instantaneous slope m = dy/dx and the direction of physical velocity.`,
+          },
+        ],
+      };
+    }
+
+    if (domain === 'mathematics') {
+      return {
+        concept: topic,
+        domain: 'mathematics',
+        coreIntuition: `Understanding ${topic} by establishing foundational mathematical spaces, mapping transformations, contrasting with edge cases, and deriving the governing mathematical invariant.`,
+        commonMisconceptions: ['Applying formulas mechanically without verifying prerequisites', 'Confusing input parameters with transformed outputs'],
+        progressionStages: [
+          {
+            stageNumber: 1,
+            title: `Visual Foundation: ${topic} Space & Setup`,
+            objective: `Establish the foundational axes, input space, and anchor structures for ${topic}.`,
+            narrationScript: `Welcome to our visual study of ${topic}. Look at the board: we start on the left with our baseline elements, setting up the exact mathematical context before any transformation begins.`,
+          },
+          {
+            stageNumber: 2,
+            title: `Core Operation: ${topic} in Action`,
+            objective: `Illustrate the active mathematical mapping, geometric curve, or symbolic transformation.`,
+            narrationScript: `Now, observe ${topic} in action. Notice how our entities interact across the center of the canvas: each step is governed by our foundational mathematical relation.`,
+          },
+          {
+            stageNumber: 3,
+            title: 'Critical Contrast: True Theorem vs Boundary Conditions',
+            objective: `Contrast the valid mathematical rule against non-examples, discontinuities, or edge cases.`,
+            narrationScript: `Look at the contrast badge at the top right: what makes this concept so powerful is knowing where it strictly applies versus where edge cases or boundary limits emerge.`,
+          },
+          {
+            stageNumber: 4,
+            title: 'Universal Invariant & Formula Card',
+            objective: `Display the definitive formula, identity, or invariant property card governing ${topic}.`,
+            narrationScript: `And here is your definitive takeaway across the bottom of the board: keep this invariant relationship in mind whenever you analyze or solve problems involving ${topic}.`,
           },
         ],
       };
@@ -599,7 +684,11 @@ export class AgentOrchestrator {
       return this.buildSetTheorySpatialBlueprint(origin, palette, pedagogy);
     }
 
-    if (pedagogy.domain === 'mathematics') {
+    if (/(function|def\s+|method|routine)/i.test(pedagogy.concept) && (pedagogy.domain === 'algorithms' || /python|code|program/i.test(pedagogy.concept))) {
+      return this.buildSoftwareFunctionSpatialBlueprint(origin, palette, pedagogy);
+    }
+
+    if (pedagogy.domain === 'mathematics' && /(tangent|derivative|calculus|secant|slope)/i.test(pedagogy.concept)) {
       return this.buildMathSpatialBlueprint(origin, palette, pedagogy);
     }
 
@@ -976,6 +1065,65 @@ export class AgentOrchestrator {
         { stepNumber: 2, title: pedagogy.progressionStages[1]?.title || 'Message Protocol', explanation: pedagogy.progressionStages[1]?.narrationScript || '', elements: step2 },
         { stepNumber: 3, title: pedagogy.progressionStages[2]?.title || 'Fault Isolation', explanation: pedagogy.progressionStages[2]?.narrationScript || '', elements: step3 },
         { stepNumber: 4, title: pedagogy.progressionStages[3]?.title || 'SLA Guarantee', explanation: pedagogy.progressionStages[3]?.narrationScript || '', elements: step4 },
+      ],
+    };
+  }
+
+  private buildSoftwareFunctionSpatialBlueprint(origin: Point, palette: any, pedagogy: PedagogySpec): SpatialBlueprint {
+    const isPython = /python/i.test(pedagogy.concept);
+    const syntaxTitle = isPython ? 'def calculate(x, y):' : 'function calculate(x, y)';
+
+    // Header Zone: y = 65 .. 120
+    // Main Focal Zone: y = 160 .. 380 (Input on Left x=140, Box in Center x=375, Output on Right x=660)
+    // Footer Takeaway Zone: y = 415 .. 475
+
+    // Scene 1: The Machine Mental Model (Input hopper, Function machine, Output tray)
+    const step1: DrawingElement[] = [
+      // Title Badge in Header Zone
+      { id: 'badge_title', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 120, y: 65 }, width: 340, height: 45, text: `${pedagogy.concept}: The Reusable Machine` },
+      // Input Arguments card on Left (x: 140 .. 320, y: 175 .. 335)
+      { id: 'input_hopper', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.1)', strokeWidth: 2.5, start: { x: 140, y: 175 }, width: 180, height: 160, text: 'Input Arguments: (x, y)' },
+      // Central Function Machine (x: 375 .. 595, y: 155 .. 355)
+      { id: 'function_box', type: 'rect', color: palette.accent, fill: 'rgba(189, 147, 249, 0.12)', strokeWidth: 3, start: { x: 375, y: 155 }, width: 220, height: 200, text: syntaxTitle },
+      // Output Tray on Right (x: 650 .. 820, y: 175 .. 335)
+      { id: 'output_tray', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.1)', strokeWidth: 2.5, start: { x: 650, y: 175 }, width: 170, height: 160, text: 'Return Result' },
+    ];
+
+    // Scene 2: Flow arrows and execution lifecycle
+    const step2: DrawingElement[] = [
+      ...step1,
+      // Arrow 1: Passing Arguments into Function
+      { id: 'arrow_input', type: 'arrow', color: palette.primary, strokeWidth: 3, start: { x: 325, y: 255 }, end: { x: 370, y: 255 }, text: 'Pass Args' },
+      // Arrow 2: Returning Result
+      { id: 'arrow_output', type: 'arrow', color: palette.secondary, strokeWidth: 3, start: { x: 600, y: 255 }, end: { x: 645, y: 255 }, text: 'return' },
+      // Internal execution callout inside Function Box
+      { id: 'body_callout', type: 'rect', color: palette.text, fill: 'rgba(255, 255, 255, 0.05)', strokeWidth: 1, start: { x: 395, y: 245 }, width: 180, height: 75, text: 'result = x + y\nreturn result' },
+    ];
+
+    // Scene 3: Reusability vs Duplicate Code Contrast
+    const step3: DrawingElement[] = [
+      ...step2,
+      // Contrast Badge in Header Zone on right
+      { id: 'contrast_badge', type: 'rect', color: palette.auxiliary, fill: 'rgba(255, 184, 108, 0.12)', strokeWidth: 1.5, start: { x: 500, y: 65 }, width: 340, height: 45, text: 'Contrast: 1 Definition vs 50x Duplication' },
+      // Reusable calls badge
+      { id: 'calls_badge', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.08)', strokeWidth: 1.5, start: { x: 385, y: 365 }, width: 200, height: 35, text: 'calc(3, 5) → 8 | calc(10, 20) → 30' },
+    ];
+
+    // Scene 4: Definitive Takeaway Card
+    const step4: DrawingElement[] = [
+      ...step3,
+      // Summary card in Footer Zone
+      { id: 'summary_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.16)', strokeWidth: 2, start: { x: 160, y: 415 }, width: 580, height: 55, text: 'Golden Rule: Inputs (Arguments) → Logic (Body) → Output (return). Modular & Reusable!' },
+    ];
+
+    return {
+      coordinateFrame: { origin, width: 900, height: 560, showAxes: false },
+      colorPalette: palette,
+      stepBlueprints: [
+        { stepNumber: 1, title: pedagogy.progressionStages[0]?.title || 'The Reusable Machine', explanation: pedagogy.progressionStages[0]?.narrationScript || '', elements: step1 },
+        { stepNumber: 2, title: pedagogy.progressionStages[1]?.title || 'Execution Flow', explanation: pedagogy.progressionStages[1]?.narrationScript || '', elements: step2 },
+        { stepNumber: 3, title: pedagogy.progressionStages[2]?.title || 'Modular Reuse Contrast', explanation: pedagogy.progressionStages[2]?.narrationScript || '', elements: step3 },
+        { stepNumber: 4, title: pedagogy.progressionStages[3]?.title || 'Definitive Takeaway', explanation: pedagogy.progressionStages[3]?.narrationScript || '', elements: step4 },
       ],
     };
   }

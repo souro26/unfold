@@ -184,20 +184,25 @@ describe('Views and Navigation', () => {
     });
   });
 
-  it('BlackboardView toggles between Chalkboard (Rough.js) and Precision (Skia) render engines', async () => {
+  it('BlackboardView toggles between Motion Graphics, Chalkboard, and Precision render engines', async () => {
     const bbView = new BlackboardView();
-    expect(bbView.getRenderEngine()).toBe('rough');
+    expect(bbView.getRenderEngine()).toBe('motion');
 
-    // Toggle via method
+    // Toggle via method: motion -> rough
+    bbView.toggleRenderEngine();
+    expect(bbView.getRenderEngine()).toBe('rough');
+    expect(document.getElementById('vizRenderModeLabel')?.textContent).toBe('🎨 Chalkboard');
+
+    // Toggle via method: rough -> skia
     bbView.toggleRenderEngine();
     expect(bbView.getRenderEngine()).toBe('skia');
     expect(document.getElementById('vizRenderModeLabel')?.textContent).toBe('📐 Precision');
 
-    // Toggle via UI button click
+    // Toggle via UI button click: skia -> motion
     const toggleBtn = document.getElementById('vizRenderModeBtn');
     toggleBtn?.click();
-    expect(bbView.getRenderEngine()).toBe('rough');
-    expect(document.getElementById('vizRenderModeLabel')?.textContent).toBe('🎨 Chalkboard');
+    expect(bbView.getRenderEngine()).toBe('motion');
+    expect(document.getElementById('vizRenderModeLabel')?.textContent).toBe('🎬 Motion Video');
   });
 
   it('RoughRenderer handles step rendering, SVG paths, shapes, and progressive animation safely', () => {

@@ -5,7 +5,7 @@ export interface Settings {
   api_key: string | null;
   model: string;
   vision_model?: string;
-  tts_provider?: 'nvidia' | 'system';
+  tts_provider?: 'nvidia' | 'openai' | 'system' | 'custom';
   tts_model?: string;
   temperature: number;
   max_tokens: number;

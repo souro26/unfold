@@ -16,7 +16,6 @@ export class RoughRenderer {
   private roughness: number = 1.4;
   private bowing: number = 1.2;
   private showChalkDust: boolean = true;
-  private seed: number = 12345;
   public onRenderError: ((err: any) => void) | null = null;
 
   constructor(options?: RoughRendererOptions) {
@@ -223,12 +222,14 @@ export class RoughRenderer {
     const fill = el.fill || undefined;
     const fillStyle = el.fillStyle || (fill ? 'hachure' : undefined);
 
+    // Use deterministic seed based on element ID to eliminate frame-by-frame flickering
+    const elemSeed = this.getDeterministicSeed(el.id || 'elem');
     const roughOptions: any = {
       stroke,
       strokeWidth,
       roughness,
       bowing: this.bowing,
-      seed: this.seed++,
+      seed: elemSeed,
     };
 
     if (fill) {
@@ -386,5 +387,14 @@ export class RoughRenderer {
       const py = ((Math.cos(i * 47 + 23) * 0.5 + 0.5) * height);
       ctx.fillRect(px, py, 1.5, 1.5);
     }
+  }
+
+  private getDeterministicSeed(id: string): number {
+    let hash = 2166136261;
+    for (let i = 0; i < id.length; i++) {
+      hash ^= id.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (Math.abs(hash) % 50000) + 1;
   }
 }
