@@ -66,7 +66,70 @@ export class RoughRenderer {
     this.rc = null;
   }
 
-  public renderStep(step: BlackboardStep, viewport?: { zoom: number; rotation: number; panX: number; panY: number }): boolean {
+  public calculateAutoFit(step: BlackboardStep, width: number, height: number): { scale: number; transX: number; transY: number } {
+    const elements = step.elements || [];
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    for (const el of elements) {
+      if (el.start) {
+        const r = el.radius || 0;
+        const w = el.width || (el.end ? Math.abs(el.end.x - el.start.x) : 0);
+        const h = el.height || (el.end ? Math.abs(el.end.y - el.start.y) : 0);
+        minX = Math.min(minX, el.start.x - r);
+        maxX = Math.max(maxX, el.start.x + r + w);
+        minY = Math.min(minY, el.start.y - r);
+        maxY = Math.max(maxY, el.start.y + r + h);
+      }
+      if (el.end) {
+        minX = Math.min(minX, el.end.x);
+        maxX = Math.max(maxX, el.end.x);
+        minY = Math.min(minY, el.end.y);
+        maxY = Math.max(maxY, el.end.y);
+      }
+    }
+
+    if (!isFinite(minX) || !isFinite(maxX) || minX >= maxX) {
+      minX = 80;
+      maxX = 820;
+    }
+    if (!isFinite(minY) || !isFinite(maxY) || minY >= maxY) {
+      minY = 50;
+      maxY = 510;
+    }
+
+    const boundsW = Math.max(320, maxX - minX);
+    const boundsH = Math.max(220, maxY - minY);
+    const boundsCenterX = (minX + maxX) / 2;
+    const boundsCenterY = (minY + maxY) / 2;
+
+    // Available drawing area reserving margins for top title/toolbar and bottom video timeline controls
+    const paddingX = 80;
+    const paddingTop = 75;
+    const paddingBottom = 85;
+    const availW = Math.max(200, width - paddingX * 2);
+    const availH = Math.max(200, height - (paddingTop + paddingBottom));
+
+    // Calculate scale factor to comfortably fill ~85% of screen (between 0.75x and 2.6x)
+    let scale = Math.min(availW / boundsW, availH / boundsH);
+    scale = Math.max(0.75, Math.min(2.6, scale));
+
+    const targetCenterX = width / 2;
+    const targetCenterY = paddingTop + availH / 2;
+
+    const transX = targetCenterX - boundsCenterX * scale;
+    const transY = targetCenterY - boundsCenterY * scale;
+
+    return { scale, transX, transY };
+  }
+
+  public renderStep(
+    step: BlackboardStep,
+    viewport?: { zoom: number; rotation: number; panX: number; panY: number },
+    precomputedFit?: { scale: number; transX: number; transY: number }
+  ): boolean {
     if (!this.canvas || !this.ctx || !this.rc) return false;
     const ctx = this.ctx;
     const width = this.canvas.width;
@@ -79,13 +142,20 @@ export class RoughRenderer {
       // Blackboard background & subtle chalk dust texture
       this.drawBlackboardBackground(ctx, width, height);
 
-      // Viewport transformations (zoom, pan, rotation)
+      // Compute or use auto-fit centering & scaling so drawings utilize the FULL screen
+      const fit = precomputedFit || this.calculateAutoFit(step, width, height);
+
+      // Viewport transformations (user zoom, pan, rotation around screen center)
       if (viewport) {
         ctx.translate(width / 2 + viewport.panX, height / 2 + viewport.panY);
         if (viewport.rotation !== 0) ctx.rotate((viewport.rotation * Math.PI) / 180);
         if (viewport.zoom !== 1) ctx.scale(viewport.zoom, viewport.zoom);
         ctx.translate(-width / 2, -height / 2);
       }
+
+      // Auto-fit centering and scale
+      ctx.translate(fit.transX, fit.transY);
+      ctx.scale(fit.scale, fit.scale);
 
       // Draw all elements for the step
       const elements = step.elements || [];
@@ -115,6 +185,8 @@ export class RoughRenderer {
       return;
     }
 
+    // Precompute auto-fit layout based on FULL accumulated step so coordinate frame stays rock-solid
+    const fit = this.calculateAutoFit(step, this.canvas.width, this.canvas.height);
     const startTime = performance.now();
     const totalElements = elements.length;
 
@@ -129,7 +201,7 @@ export class RoughRenderer {
         elements: elements.slice(0, visibleCount),
       };
 
-      this.renderStep(partialStep, viewport);
+      this.renderStep(partialStep, viewport, fit);
 
       if (progress < 1.0) {
         this.animationId = requestAnimationFrame(frame);
@@ -170,8 +242,8 @@ export class RoughRenderer {
       case 'rect': {
         const x = el.start?.x ?? 100;
         const y = el.start?.y ?? 100;
-        const w = el.width ?? 160;
-        const h = el.height ?? 80;
+        const w = el.width ?? (el.end ? Math.abs(el.end.x - x) : 160);
+        const h = el.height ?? (el.end ? Math.abs(el.end.y - y) : 80);
         rc.rectangle(x, y, w, h, roughOptions);
 
         if (el.text) {
@@ -238,8 +310,9 @@ export class RoughRenderer {
       }
 
       case 'path': {
-        if (el.d) {
-          rc.path(el.d, roughOptions);
+        const pathData = el.d || (el as any).pathDescription;
+        if (pathData) {
+          rc.path(pathData, roughOptions);
         }
         if (el.text && el.start) {
           this.drawChalkText(el.text, el.start.x, el.start.y - 10, stroke, 12, true);

@@ -540,6 +540,14 @@ export class BlackboardView {
     x = x / this.viewport.zoom + cx;
     y = y / this.viewport.zoom + cy;
 
+    // Invert auto-fit scaling and translation when step elements exist
+    if (this.currentSteps.length > 0 && this.canvasEl) {
+      const step = this.getAccumulatedStep(this.currentStepIndex);
+      const fit = this.roughRenderer.calculateAutoFit(step, this.canvasEl.width, this.canvasEl.height);
+      x = (x - fit.transX) / fit.scale;
+      y = (y - fit.transY) / fit.scale;
+    }
+
     return { x, y };
   }
 
@@ -840,52 +848,63 @@ export class BlackboardView {
     if (!this.ctx || !this.canvasEl) return;
     this.ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
 
-    this.ctx.save();
-    const cx = this.canvasEl.width / 2;
-    const cy = this.canvasEl.height / 2;
-    this.ctx.translate(cx + this.viewport.panX, cy + this.viewport.panY);
-    this.ctx.rotate(this.viewport.rotation);
-    this.ctx.scale(this.viewport.zoom, this.viewport.zoom);
-    this.ctx.translate(-cx, -cy);
+    const width = this.canvasEl.width;
+    const height = this.canvasEl.height;
 
-    this.drawGrid();
+    this.ctx.save();
 
     if (this.currentSteps.length > 0) {
       const step = this.getAccumulatedStep(this.currentStepIndex);
-      if (step && step.elements) {
-      step.elements.forEach((el) => {
-        if (!this.ctx) return;
-        this.ctx.strokeStyle = el.color || '#00d4aa';
-        this.ctx.lineWidth = el.strokeWidth || 2;
-        this.ctx.lineCap = 'round';
-        this.ctx.lineJoin = 'round';
+      const fit = this.roughRenderer.calculateAutoFit(step, width, height);
 
-        if (el.type === 'rect' && el.start && el.width && el.height) {
-          this.ctx.strokeRect(el.start.x, el.start.y, el.width, el.height);
-          if (el.text) {
-            this.ctx.save();
-            this.ctx.fillStyle = el.color || '#ffffff';
-            this.ctx.font = '13px Inter, sans-serif';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(el.text, el.start.x + el.width / 2, el.start.y + el.height / 2);
-            this.ctx.restore();
-          }
-        } else if (el.type === 'circle' && el.start) {
-          const radius = el.radius || (el.width ? el.width / 2 : 60);
-          this.ctx.beginPath();
-          this.ctx.arc(el.start.x, el.start.y, radius, 0, Math.PI * 2);
-          this.ctx.stroke();
-          if (el.text) {
-            this.ctx.save();
-            this.ctx.fillStyle = el.color || '#ffffff';
-            this.ctx.font = '14px Inter, sans-serif';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(el.text, el.start.x, el.start.y);
-            this.ctx.restore();
-          }
-        } else if (el.type === 'line' && el.start && el.end) {
+      // Viewport user transformations around screen center
+      this.ctx.translate(width / 2 + this.viewport.panX, height / 2 + this.viewport.panY);
+      if (this.viewport.rotation !== 0) this.ctx.rotate((this.viewport.rotation * Math.PI) / 180);
+      if (this.viewport.zoom !== 1) this.ctx.scale(this.viewport.zoom, this.viewport.zoom);
+      this.ctx.translate(-width / 2, -height / 2);
+
+      // Auto-fit centering and scale
+      this.ctx.translate(fit.transX, fit.transY);
+      this.ctx.scale(fit.scale, fit.scale);
+
+      this.drawGrid();
+
+      if (step && step.elements) {
+        step.elements.forEach((el) => {
+          if (!this.ctx) return;
+          this.ctx.strokeStyle = el.color || '#00d4aa';
+          this.ctx.lineWidth = el.strokeWidth || 2;
+          this.ctx.lineCap = 'round';
+          this.ctx.lineJoin = 'round';
+
+          if (el.type === 'rect' && el.start) {
+            const w = el.width ?? (el.end ? Math.abs(el.end.x - el.start.x) : 160);
+            const h = el.height ?? (el.end ? Math.abs(el.end.y - el.start.y) : 80);
+            this.ctx.strokeRect(el.start.x, el.start.y, w, h);
+            if (el.text) {
+              this.ctx.save();
+              this.ctx.fillStyle = el.color || '#ffffff';
+              this.ctx.font = '13px Inter, sans-serif';
+              this.ctx.textAlign = 'center';
+              this.ctx.textBaseline = 'middle';
+              this.ctx.fillText(el.text, el.start.x + w / 2, el.start.y + h / 2);
+              this.ctx.restore();
+            }
+          } else if (el.type === 'circle' && el.start) {
+            const radius = el.radius || (el.width ? el.width / 2 : 60);
+            this.ctx.beginPath();
+            this.ctx.arc(el.start.x, el.start.y, radius, 0, Math.PI * 2);
+            this.ctx.stroke();
+            if (el.text) {
+              this.ctx.save();
+              this.ctx.fillStyle = el.color || '#ffffff';
+              this.ctx.font = '14px Inter, sans-serif';
+              this.ctx.textAlign = 'center';
+              this.ctx.textBaseline = 'middle';
+              this.ctx.fillText(el.text, el.start.x, el.start.y);
+              this.ctx.restore();
+            }
+          } else if (el.type === 'line' && el.start && el.end) {
           this.ctx.beginPath();
           this.ctx.moveTo(el.start.x, el.start.y);
           this.ctx.lineTo(el.end.x, el.end.y);

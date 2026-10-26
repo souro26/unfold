@@ -11,9 +11,11 @@ pub struct SendMessageRequest {
     pub conversation_id: Option<String>,
     #[serde(default)]
     pub image_base64: Option<String>,
+    #[serde(default)]
+    pub history: Option<Vec<ChatMessage>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
@@ -208,6 +210,7 @@ pub async fn send_message(
         .or_else(|| request.as_ref().and_then(|r| r.conversation_id.clone()));
     let img = image_base64
         .or_else(|| request.as_ref().and_then(|r| r.image_base64.clone()));
+    let conv_history = request.as_ref().and_then(|r| r.history.clone()).unwrap_or_default();
     let mut model = settings.model.clone();
     if model.is_empty() || model.contains("llama-3.3-70b") {
         if settings.llm_provider == "nvidia" {
@@ -231,20 +234,27 @@ pub async fn send_message(
         }
     }
 
-    let messages = vec![
+    let mut messages = vec![
         ChatMessage {
             role: "system".to_string(),
             content: UNFOLD_SYSTEM_PROMPT.to_string(),
         },
-        ChatMessage {
-            role: "user".to_string(),
-            content: prompt.clone(),
-        },
     ];
+
+    for prev in conv_history {
+        if prev.role != "system" {
+            messages.push(prev);
+        }
+    }
+
+    messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: prompt.clone(),
+    });
 
     let request_body = ChatCompletionRequest {
         model: model.clone(),
-        messages,
+        messages: messages.clone(),
         temperature: 0.7,
         max_tokens: 4096,
         stream: false,
@@ -275,16 +285,16 @@ pub async fn send_message(
                 model.replace("models/", ""),
                 api_key
             );
-            return call_gemini(&url, prompt).await;
+            return call_gemini(&url, &messages).await;
         }
         "ollama" => {
             let base = std::env::var("OLLAMA_ENDPOINT").unwrap_or_else(|_| "http://localhost:11434".to_string());
             let url = format!("{}/api/chat", base);
-            return call_ollama(&url, model, prompt).await;
+            return call_ollama(&url, model, &messages).await;
         }
         "llama_cpp" | "local" => {
             let base = std::env::var("LLAMA_CPP_ENDPOINT").unwrap_or_else(|_| "http://localhost:8080/v1".to_string());
-            return call_llama_cpp(&base, model, prompt).await;
+            return call_llama_cpp(&base, model, messages).await;
         }
         _ => return Err(format!("Unknown provider: {}", settings.llm_provider)),
     };
@@ -364,18 +374,16 @@ pub async fn send_message(
     Ok(content)
 }
 
-async fn call_gemini(url: &str, prompt: String) -> Result<String, String> {
+async fn call_gemini(url: &str, messages: &[ChatMessage]) -> Result<String, String> {
+    let contents: Vec<GeminiContent> = messages
+        .iter()
+        .map(|m| GeminiContent {
+            parts: vec![GeminiPart { text: m.content.clone() }],
+        })
+        .collect();
+
     let gemini_request = GeminiRequest {
-        contents: vec![
-            GeminiContent {
-                parts: vec![GeminiPart {
-                    text: UNFOLD_SYSTEM_PROMPT.to_string(),
-                }],
-            },
-            GeminiContent {
-                parts: vec![GeminiPart { text: prompt }],
-            },
-        ],
+        contents,
         generation_config: GeminiConfig {
             temperature: 0.7,
             max_output_tokens: 4096,
@@ -412,7 +420,7 @@ async fn call_gemini(url: &str, prompt: String) -> Result<String, String> {
     Ok(content)
 }
 
-async fn call_ollama(url: &str, model: String, prompt: String) -> Result<String, String> {
+async fn call_ollama(url: &str, model: String, messages: &[ChatMessage]) -> Result<String, String> {
     #[derive(Serialize, Deserialize)]
     struct OllamaMessage {
         role: String,
@@ -431,18 +439,17 @@ async fn call_ollama(url: &str, model: String, prompt: String) -> Result<String,
         num_predict: u32,
     }
 
+    let ollama_messages: Vec<OllamaMessage> = messages
+        .iter()
+        .map(|m| OllamaMessage {
+            role: m.role.clone(),
+            content: m.content.clone(),
+        })
+        .collect();
+
     let ollama_request = OllamaRequest {
         model,
-        messages: vec![
-            OllamaMessage {
-                role: "system".to_string(),
-                content: UNFOLD_SYSTEM_PROMPT.to_string(),
-            },
-            OllamaMessage {
-                role: "user".to_string(),
-                content: prompt,
-            },
-        ],
+        messages: ollama_messages,
         stream: false,
         options: OllamaOptions {
             temperature: 0.7,
@@ -478,18 +485,7 @@ async fn call_ollama(url: &str, model: String, prompt: String) -> Result<String,
     Ok(ollama_resp.message.content)
 }
 
-async fn call_llama_cpp(base_url: &str, model: String, prompt: String) -> Result<String, String> {
-    let messages = vec![
-        ChatMessage {
-            role: "system".to_string(),
-            content: UNFOLD_SYSTEM_PROMPT.to_string(),
-        },
-        ChatMessage {
-            role: "user".to_string(),
-            content: prompt,
-        },
-    ];
-
+async fn call_llama_cpp(base_url: &str, model: String, messages: Vec<ChatMessage>) -> Result<String, String> {
     let request_body = ChatCompletionRequest {
         model,
         messages,

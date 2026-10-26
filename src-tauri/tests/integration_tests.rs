@@ -37,6 +37,7 @@ fn test_integration_chat_payload_generation() {
         prompt: "Teach me how Raft consensus algorithm works step by step".into(),
         conversation_id: Some("conv_integration_42".into()),
         image_base64: None,
+        history: None,
     };
 
     let serialized = serde_json::to_string(&req).expect("serialize send message request");

@@ -1,6 +1,7 @@
-import { BlackboardStep, DrawingElement, Point } from '../types';
+import { BlackboardStep, DrawingElement, Point, Message } from '../types';
 import { getSettings, sendMessage } from './ipc';
 import { DecisionEngineLogger } from './DecisionEngineLogger';
+import { getConversationHistory } from './storage';
 
 export interface PedagogyMilestone {
   stageNumber: number;
@@ -88,6 +89,11 @@ export class AgentOrchestrator {
 
     try {
       // -------------------------------------------------------------
+      // Multi-Turn Context: Retrieve Conversation History
+      // -------------------------------------------------------------
+      const convHistory: Message[] = conversationId ? getConversationHistory(conversationId) : [];
+
+      // -------------------------------------------------------------
       // LAYER 1: Intent & Pedagogical Deconstruction Agent
       // -------------------------------------------------------------
       onProgress?.({
@@ -98,7 +104,7 @@ export class AgentOrchestrator {
 
       // Small micro-delay allows UI to render the agent thinking state
       await new Promise((r) => setTimeout(r, 120));
-      const pedagogy = this.deconstructPedagogy(cleanPrompt);
+      const pedagogy = this.deconstructPedagogy(cleanPrompt, convHistory);
       logger.logFold1Pedagogy(pedagogy);
 
       // -------------------------------------------------------------
@@ -123,7 +129,7 @@ export class AgentOrchestrator {
         detail: 'Compiling structured execution plan and dispatching to drawing agent...',
       });
 
-      const finalAgentPrompt = this.synthesizeDrawingPrompt(cleanPrompt, pedagogy, spatialBlueprint);
+      const finalAgentPrompt = this.synthesizeDrawingPrompt(cleanPrompt, pedagogy, spatialBlueprint, convHistory);
       logger.logFold3Prompt(finalAgentPrompt);
 
       const trace: AgentReasoningTrace = {
@@ -140,7 +146,11 @@ export class AgentOrchestrator {
       // -------------------------------------------------------------
       const settings = await getSettings();
       const llmStartTime = Date.now();
-      const rawResponse = await sendMessage(finalAgentPrompt, conversationId, screenImageBase64);
+      const historyPayload = convHistory.slice(-8).map((m) => ({
+        role: m.role,
+        content: m.content.slice(0, 1000),
+      }));
+      const rawResponse = await sendMessage(finalAgentPrompt, conversationId, screenImageBase64, historyPayload);
       const llmDurationMs = Date.now() - llmStartTime;
 
       logger.logFold4Inference(
@@ -182,8 +192,46 @@ export class AgentOrchestrator {
   // =========================================================================
   // LAYER 1: Pedagogical Deconstruction
   // =========================================================================
-  public deconstructPedagogy(prompt: string): PedagogySpec {
-    const p = prompt.toLowerCase();
+  public deconstructPedagogy(prompt: string, history?: Message[]): PedagogySpec {
+    const cleanPrompt = prompt.trim();
+    let isFollowUp = false;
+    let followUpType: 'simpler' | 'example' | 'clarify' | 'general' = 'general';
+
+    // Follow-up detection (e.g. "can you explain it simpler please?", "give another example", "why?", etc.)
+    const followUpRegex = /^(?:can\s+you\s+|could\s+you\s+|please\s+)?(?:explain\s+(?:it\s+)?(?:simpler|more\s+simply|in\s+simple\s+terms|again|further|more)|make\s+it\s+simpler|simplify|give\s+(?:me\s+)?(?:an|another)\s+example|why(?:\s+is\s+that)?|how\s+so|what\s+about|what\s+if|tell\s+me\s+more|elaborate|clarify|summarize)(?:[?!.,\s]|$)/i;
+
+    const wordCount = cleanPrompt.split(/\s+/).length;
+    if (followUpRegex.test(cleanPrompt) || (wordCount <= 6 && !/(tangent|derivative|calculus|integral|curve|circle|geometry|set|union|intersection|venn|subset|tree|binary|algorithm|microservice|physics|force)/i.test(cleanPrompt))) {
+      isFollowUp = true;
+      if (/simpler|simple|easier|layman/i.test(cleanPrompt)) {
+        followUpType = 'simpler';
+      } else if (/example|instance|case/i.test(cleanPrompt)) {
+        followUpType = 'example';
+      }
+    }
+
+    let contextualTopic = '';
+    if (isFollowUp && history && history.length > 0) {
+      for (let i = history.length - 1; i >= 0; i--) {
+        const msg = history[i];
+        if (msg.role === 'user') {
+          const pastText = msg.content.trim();
+          if (pastText && !followUpRegex.test(pastText) && pastText.length > 5) {
+            contextualTopic = pastText;
+            break;
+          }
+        }
+      }
+    }
+
+    // Merge context if follow-up
+    const resolvedPrompt = contextualTopic
+      ? (followUpType === 'simpler'
+          ? `${contextualTopic} (explained in simpler intuitive terms with everyday analogies)`
+          : `${contextualTopic} (${cleanPrompt})`)
+      : cleanPrompt;
+
+    const p = resolvedPrompt.toLowerCase();
 
     // 1. Classify domain
     let domain: PedagogySpec['domain'] = 'general';
@@ -197,17 +245,64 @@ export class AgentOrchestrator {
       domain = 'physics';
     }
 
-    const topic = prompt
+    const topic = resolvedPrompt
       .replace(/^(?:teach\s+me|explain|what\s+is|how\s+does|draw|show\s+me|visualize)\s+(?:about\s+|what\s+|how\s+)?/i, '')
       .replace(/[?!.]/g, '')
       .trim() || 'Concept Overview';
 
-    if (domain === 'mathematics' && /(set|union|intersection|venn|subset)/i.test(p)) {
+    // Set Theory: Specifically Intersection
+    if (domain === 'mathematics' && /(intersection|overlap|shared)/i.test(p) && !/union/i.test(cleanPrompt)) {
       return {
-        concept: 'Union and Operations in Set Theory',
+        concept: followUpType === 'simpler' ? 'Intersection in Set Theory (Simple Intuition)' : 'Intersection in Set Theory',
         domain: 'mathematics',
-        coreIntuition:
-          'A set is a collection of distinct elements. The Union of Set A and Set B (written A ∪ B) merges all items from both sets into a single collection—including anything in A, anything in B, or in both—without ever duplicating shared items.',
+        coreIntuition: followUpType === 'simpler'
+          ? 'Imagine two groups of friends: the Intersection is ONLY the people who belong to BOTH groups at the exact same time. If someone is only in group A or only in group B, they do not belong to the intersection.'
+          : 'The Intersection of Set A and Set B (written A ∩ B) selects ONLY the elements that simultaneously belong to both collections—the shared overlap—excluding anything unique to only one set.',
+        commonMisconceptions: [
+          'Confusing Intersection (AND: elements strictly in both) with Union (OR: elements in either or both)',
+          'Assuming disjoint sets have an undefined intersection (it is the empty set ∅)',
+        ],
+        progressionStages: [
+          {
+            stageNumber: 1,
+            title: 'Visual Foundation: Two Overlapping Sets A & B',
+            objective: 'Draw the universal set frame and two overlapping Venn circles representing Set A and Set B with concrete member elements.',
+            narrationScript:
+              'Look at the board: we start with two groups of friends. Circle A on the left in cyan has items 1 and 2. Circle B on the right in violet has items 4 and 5. Right in the middle, where both circles overlap, is item 3.',
+          },
+          {
+            stageNumber: 2,
+            title: 'Core Concept in Action: The Overlap Lens (A ∩ B)',
+            objective: 'Highlight exclusively the narrow shared lens in the center to show only the common elements.',
+            narrationScript:
+              'Now, what is the Intersection, written A intersection B? Think of the word intersection like a street intersection where two roads cross: it is only where both overlap! Look at the glowing golden lens in the center. Only item 3 is in both A and B. So A intersection B is simply the set containing 3.',
+          },
+          {
+            stageNumber: 3,
+            title: 'Comparative Contrast: Intersection (AND) vs Union (OR)',
+            objective: 'Contrast the exclusive intersection against the inclusive union and showcase disjoint sets.',
+            narrationScript:
+              'Notice the critical distinction: the Union says OR—bring everyone together, giving us 1, 2, 3, 4, 5. But Intersection says AND—you must be in A AND in B. If two sets share nothing, their intersection is empty, called the null set.',
+          },
+          {
+            stageNumber: 4,
+            title: 'Universal Invariant: Counting Formula for Intersection',
+            objective: 'Display the formal cardinality formula card |A ∩ B| = |A| + |B| - |A ∪ B| and verify with our concrete counts.',
+            narrationScript:
+              'And here is our universal rule: the intersection size equals the size of A plus the size of B minus the union. In our example: 3 plus 3 minus 5 equals 1. Exactly our single shared item 3!',
+          },
+        ],
+      };
+    }
+
+    // Set Theory: Union
+    if (domain === 'mathematics' && /(set|union|venn|subset)/i.test(p)) {
+      return {
+        concept: followUpType === 'simpler' ? 'Union in Set Theory (Simple Intuition)' : 'Union and Operations in Set Theory',
+        domain: 'mathematics',
+        coreIntuition: followUpType === 'simpler'
+          ? 'Imagine two boxes of toys: the Union means dumping all the toys together into one big toy box without putting two of the exact same toy inside.'
+          : 'A set is a collection of distinct elements. The Union of Set A and Set B (written A ∪ B) merges all items from both sets into a single collection—including anything in A, anything in B, or in both—without ever duplicating shared items.',
         commonMisconceptions: [
           'Double-counting elements in the intersection when calculating the union size (|A| + |B|)',
           'Confusing Union (OR: elements in A, B, or both) with Intersection (AND: elements only in both)',
@@ -584,54 +679,95 @@ export class AgentOrchestrator {
   }
 
   private buildSetTheorySpatialBlueprint(origin: Point, palette: any, pedagogy: PedagogySpec): SpatialBlueprint {
+    const isIntersection = /(intersection|overlap|shared)/i.test(pedagogy.concept) && !/union/i.test(pedagogy.concept);
     const cax = 370;
     const cbx = 530;
-    const cy = 250;
-    const r = 115;
+    const cy = 260;
+    const r = 110;
+
+    // Non-overlapping Vertical Zones:
+    // Header Zone: y = 65 .. 125 (title badges, universe frame label, warnings)
+    // Main Focal Zone: y = 150 .. 380 (Circles A & B, member dots, overlap lens)
+    // Footer Zone: y = 410 .. 475 (Formula cards, definitive results, takeaways)
 
     // Scene 1: Universal Set frame, Circle A (Cyan), Circle B (Violet), member elements 1,2 in A, 3 in overlap, 4,5 in B
     const step1Elements: DrawingElement[] = [
-      // Universe frame
-      { id: 'univ_frame', type: 'rect', color: 'rgba(255, 255, 255, 0.2)', strokeWidth: 1.5, start: { x: 140, y: 80 }, width: 620, height: 340, text: 'Universal Set U' },
-      // Circle A (Cyan)
+      // Universe frame (height 410: y=65 to 475)
+      { id: 'univ_frame', type: 'rect', color: 'rgba(255, 255, 255, 0.2)', strokeWidth: 1.5, start: { x: 140, y: 65 }, width: 620, height: 410, text: 'Universal Set U' },
+      // Circle A (Cyan) centered at (370, 260) -> y from 150 to 370
       { id: 'circle_a', type: 'circle', color: palette.primary, strokeWidth: 3, start: { x: cax, y: cy }, radius: r, text: 'Set A = {1, 2, 3}' },
-      // Circle B (Violet)
+      // Circle B (Violet) centered at (530, 260) -> y from 150 to 370
       { id: 'circle_b', type: 'circle', color: palette.accent, strokeWidth: 3, start: { x: cbx, y: cy }, radius: r, text: 'Set B = {3, 4, 5}' },
       // Member elements in A only (left crescent)
-      { id: 'el_1', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: 310, y: 220 }, radius: 5, text: '• 1' },
-      { id: 'el_2', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: 320, y: 280 }, radius: 5, text: '• 2' },
+      { id: 'el_1', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: 305, y: 230 }, radius: 5, text: '• 1' },
+      { id: 'el_2', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: 315, y: 290 }, radius: 5, text: '• 2' },
       // Member element in Intersection (middle overlap x=450)
-      { id: 'el_3', type: 'circle', color: palette.secondary, strokeWidth: 3, start: { x: 450, y: 250 }, radius: 6, text: '• 3' },
+      { id: 'el_3', type: 'circle', color: palette.secondary, strokeWidth: 3, start: { x: 450, y: 260 }, radius: 6, text: '• 3' },
       // Member elements in B only (right crescent)
-      { id: 'el_4', type: 'circle', color: palette.accent, strokeWidth: 2, start: { x: 580, y: 220 }, radius: 5, text: '• 4' },
-      { id: 'el_5', type: 'circle', color: palette.accent, strokeWidth: 2, start: { x: 590, y: 280 }, radius: 5, text: '• 5' },
-      // Title badge
-      { id: 'badge_1', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 160, y: 100 }, width: 280, height: 50, text: 'Two Overlapping Sets with Elements' },
+      { id: 'el_4', type: 'circle', color: palette.accent, strokeWidth: 2, start: { x: 585, y: 230 }, radius: 5, text: '• 4' },
+      { id: 'el_5', type: 'circle', color: palette.accent, strokeWidth: 2, start: { x: 595, y: 290 }, radius: 5, text: '• 5' },
+      // Title badge in Header Zone
+      { id: 'badge_1', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 160, y: 75 }, width: 280, height: 45, text: isIntersection ? 'Two Sets with Shared Overlap' : 'Two Overlapping Sets with Elements' },
     ];
 
+    if (isIntersection) {
+      // Intersection Blueprint: Highlights strictly the shared lens (A ∩ B)
+      const step2Elements: DrawingElement[] = [
+        ...step1Elements,
+        // Glowing intersection lens
+        { id: 'inter_lens', type: 'circle', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.2)', strokeWidth: 3, start: { x: 450, y: 260 }, radius: 45, text: 'Overlap (A ∩ B)' },
+        // Result Card in Footer Zone
+        { id: 'inter_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.15)', strokeWidth: 2, start: { x: 250, y: 410 }, width: 400, height: 55, text: 'A ∩ B = {3} (Elements strictly in BOTH)' },
+      ];
+
+      const step3Elements: DrawingElement[] = [
+        ...step2Elements,
+        // Contrast badge in Header Zone
+        { id: 'contrast_badge', type: 'rect', color: palette.auxiliary, fill: 'rgba(255, 184, 108, 0.12)', strokeWidth: 2, start: { x: 480, y: 75 }, width: 320, height: 45, text: 'Contrast: Intersection (AND) vs Union (OR)' },
+      ];
+
+      const step4Elements: DrawingElement[] = [
+        ...step3Elements,
+        // Formula card in Footer Zone replacing/enhancing result card
+        { id: 'formula_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.18)', strokeWidth: 2.5, start: { x: 190, y: 410 }, width: 520, height: 55, text: '|A ∩ B| = |A| + |B| - |A ∪ B| = 3 + 3 - 5 = 1' },
+      ];
+
+      return {
+        coordinateFrame: { origin, width: 900, height: 560, showAxes: false },
+        colorPalette: palette,
+        stepBlueprints: [
+          { stepNumber: 1, title: pedagogy.progressionStages[0]?.title || 'Foundation: Overlapping Sets', explanation: pedagogy.progressionStages[0]?.narrationScript || '', elements: step1Elements },
+          { stepNumber: 2, title: pedagogy.progressionStages[1]?.title || 'Core Operation: The Overlap Lens', explanation: pedagogy.progressionStages[1]?.narrationScript || '', elements: step2Elements },
+          { stepNumber: 3, title: pedagogy.progressionStages[2]?.title || 'Comparative Contrast: AND vs OR', explanation: pedagogy.progressionStages[2]?.narrationScript || '', elements: step3Elements },
+          { stepNumber: 4, title: pedagogy.progressionStages[3]?.title || 'Universal Invariant: Intersection Counting', explanation: pedagogy.progressionStages[3]?.narrationScript || '', elements: step4Elements },
+        ],
+      };
+    }
+
+    // Union Blueprint
     // Scene 2: The Grand Union A ∪ B (all unique elements merged)
     const step2Elements: DrawingElement[] = [
       ...step1Elements,
       // Highlighted Union boundary envelope wrapping both circles
-      { id: 'union_envelope', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.08)', strokeWidth: 2.5, start: { x: 235, y: 120 }, width: 430, height: 260, text: 'Grand Union A ∪ B' },
-      // Result Card at bottom
-      { id: 'union_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.15)', strokeWidth: 2, start: { x: 250, y: 360 }, width: 400, height: 55, text: 'A ∪ B = {1, 2, 3, 4, 5} (5 unique items)' },
+      { id: 'union_envelope', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.08)', strokeWidth: 2.5, start: { x: 235, y: 135 }, width: 430, height: 250, text: 'Grand Union A ∪ B' },
+      // Result Card in Footer Zone
+      { id: 'union_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.15)', strokeWidth: 2, start: { x: 250, y: 410 }, width: 400, height: 55, text: 'A ∪ B = {1, 2, 3, 4, 5} (5 unique items)' },
     ];
 
     // Scene 3: Comparative Contrast - Double-Counting Trap vs Intersection
     const step3Elements: DrawingElement[] = [
       ...step2Elements,
       // Highlight intersection element 3 with warning coral ring
-      { id: 'warn_intersection_ring', type: 'circle', color: palette.highlight, strokeWidth: 3, start: { x: 450, y: 250 }, radius: 14 },
-      // Warning card at top right
-      { id: 'double_count_warning', type: 'rect', color: palette.highlight, fill: 'rgba(255, 85, 85, 0.12)', strokeWidth: 2, start: { x: 480, y: 45 }, width: 320, height: 60, text: 'Double-Counting Trap: 3 + 3 = 6 ≠ 5' },
+      { id: 'warn_intersection_ring', type: 'circle', color: palette.highlight, strokeWidth: 3, start: { x: 450, y: 260 }, radius: 14 },
+      // Warning card in Header Zone
+      { id: 'double_count_warning', type: 'rect', color: palette.highlight, fill: 'rgba(255, 85, 85, 0.12)', strokeWidth: 2, start: { x: 480, y: 75 }, width: 320, height: 45, text: 'Double-Counting Trap: 3 + 3 = 6 ≠ 5' },
     ];
 
     // Scene 4: Universal Invariant - Principle of Inclusion-Exclusion
     const step4Elements: DrawingElement[] = [
       ...step3Elements,
-      // Formula card
-      { id: 'formula_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.18)', strokeWidth: 2.5, start: { x: 200, y: 350 }, width: 500, height: 75, text: '|A ∪ B| = |A| + |B| - |A ∩ B| = 3 + 3 - 1 = 5' },
+      // Formula card in Footer Zone
+      { id: 'formula_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.18)', strokeWidth: 2.5, start: { x: 190, y: 410 }, width: 520, height: 55, text: '|A ∪ B| = |A| + |B| - |A ∩ B| = 3 + 3 - 1 = 5' },
     ];
 
     return {
@@ -876,16 +1012,29 @@ export class AgentOrchestrator {
   // =========================================================================
   // LAYER 3: Master Drawing Prompt Synthesis
   // =========================================================================
-  public synthesizeDrawingPrompt(rawPrompt: string, pedagogy: PedagogySpec, spatial: SpatialBlueprint): string {
+  public synthesizeDrawingPrompt(
+    rawPrompt: string,
+    pedagogy: PedagogySpec,
+    spatial: SpatialBlueprint,
+    history?: Message[]
+  ): string {
     const layoutOverview = spatial.stepBlueprints
       .map(
         (s) => `Step ${s.stepNumber} [${s.title}]:\n  Visual Focal Points: ${s.elements.map((e) => e.id + (e.text ? ` ("${e.text}")` : '')).join(', ')}`
       )
       .join('\n');
 
+    const conversationContext = history && history.length > 0
+      ? `\nONGOING TUTORIAL DIALOGUE HISTORY (Maintain continuous conversational memory):\n` +
+        history
+          .slice(-6)
+          .map((m) => `${m.role === 'user' ? 'Student' : 'Master Teacher'}: "${m.content.slice(0, 300)}"`)
+          .join('\n') + '\n'
+      : '';
+
     return `[UNFOLD MULTI-LAYER REASONING TRACE]
 The pedagogical reasoner and spatial architect have completed analysis of the learner's request.
-
+${conversationContext}
 LEARNER REQUEST: "${rawPrompt}"
 IDENTIFIED DOMAIN: ${pedagogy.domain.toUpperCase()}
 CORE MENTAL MODEL: ${pedagogy.coreIntuition}

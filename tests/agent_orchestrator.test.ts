@@ -249,5 +249,102 @@ Now, look at the bright emerald boundary wrapping around both circles. Every sin
 
     mockSend.mockRestore();
   });
+
+  it('Retains conversation context across turns when user asks follow-up queries like "explain simpler"', () => {
+    // Simulated prior conversation turns in the same chat
+    const priorHistory = [
+      {
+        id: 'msg-1',
+        role: 'user' as const,
+        content: 'please teach me what intersection in set theory is/',
+        timestamp: Date.now() - 60000,
+      },
+      {
+        id: 'msg-2',
+        role: 'assistant' as const,
+        content: 'Intersection is the shared overlap between sets...',
+        timestamp: Date.now() - 30000,
+      },
+    ];
+
+    // Follow-up prompt from user with no explicit subject noun
+    const followUpPedagogy = orchestrator.deconstructPedagogy('can you explain it simpler please?', priorHistory);
+
+    expect(followUpPedagogy.domain).toBe('mathematics');
+    expect(followUpPedagogy.concept).toContain('Intersection');
+    expect(followUpPedagogy.concept).toContain('Simple Intuition');
+    expect(followUpPedagogy.coreIntuition).toContain('groups of friends');
+    expect(followUpPedagogy.progressionStages[1].narrationScript).toContain('glowing golden lens');
+  });
+
+  it('Distinctly differentiates Set Intersection from Set Union in both pedagogy and spatial blueprint', () => {
+    // 1. Intersection
+    const interPed = orchestrator.deconstructPedagogy('explain intersection in set theory');
+    expect(interPed.concept).toContain('Intersection');
+    const interSpatial = orchestrator.architectSpatialBlueprint(interPed);
+    expect(interSpatial.stepBlueprints[1].elements.some((e) => e.text?.includes('A ∩ B'))).toBe(true);
+    expect(interSpatial.stepBlueprints[3].elements.some((e) => e.text?.includes('|A ∩ B| = |A| + |B| - |A ∪ B|'))).toBe(true);
+
+    // 2. Union
+    const unionPed = orchestrator.deconstructPedagogy('explain union in set theory');
+    expect(unionPed.concept).toContain('Union');
+    const unionSpatial = orchestrator.architectSpatialBlueprint(unionPed);
+    expect(unionSpatial.stepBlueprints[1].elements.some((e) => e.text?.includes('A ∪ B'))).toBe(true);
+    expect(unionSpatial.stepBlueprints[3].elements.some((e) => e.text?.includes('|A ∪ B| = |A| + |B| - |A ∩ B|'))).toBe(true);
+  });
+
+  it('Spatial blueprints enforce clean non-overlapping vertical zones', () => {
+    const interPed = orchestrator.deconstructPedagogy('explain intersection in set theory');
+    const spatial = orchestrator.architectSpatialBlueprint(interPed);
+
+    for (const step of spatial.stepBlueprints) {
+      // Find header badge
+      const headerBadge = step.elements.find((e) => e.id.includes('badge'));
+      // Find circles
+      const circleA = step.elements.find((e) => e.id === 'circle_a');
+      // Find footer card
+      const footerCard = step.elements.find((e) => e.id.includes('card'));
+
+      if (headerBadge && circleA) {
+        // Header badge bottom must be above circle top (circle cy - r = 260 - 110 = 150)
+        const badgeBottom = (headerBadge.start?.y || 0) + (headerBadge.height || 0);
+        const circleTop = (circleA.start?.y || 0) - (circleA.radius || 0);
+        expect(badgeBottom).toBeLessThanOrEqual(circleTop);
+      }
+
+      if (circleA && footerCard) {
+        // Circle bottom (260 + 110 = 370) must be above footer card top (410)
+        const circleBottom = (circleA.start?.y || 0) + (circleA.radius || 0);
+        const footerCardTop = footerCard.start?.y || 0;
+        expect(circleBottom).toBeLessThanOrEqual(footerCardTop);
+      }
+    }
+  });
+
+  it('RoughRenderer auto-fit scales and centers drawings to utilize full screen instead of top-left corner', async () => {
+    const { RoughRenderer } = await import('../src/renderer-rough');
+    const canvas = document.createElement('canvas');
+    canvas.width = 1920;
+    canvas.height = 1080;
+    const renderer = new RoughRenderer(canvas);
+
+    // Test auto-fit calculation for a 900x560 diagram on a 1920x1080 canvas
+    const sampleStep = {
+      step: 1,
+      title: 'Test',
+      elements: [
+        { id: '1', type: 'rect' as const, color: '#fff', start: { x: 140, y: 65 }, width: 620, height: 410 },
+      ],
+    };
+
+    const fit = (renderer as any).calculateAutoFit(sampleStep, 1920, 1080);
+    // Should scale up (> 1.2x) to fill screen comfortably (not exceed maxScale 2.6)
+    expect(fit.scale).toBeGreaterThan(1.2);
+    expect(fit.scale).toBeLessThanOrEqual(2.6);
+    // Should be centered with defined translation offsets
+    expect(typeof fit.transX).toBe('number');
+    expect(typeof fit.transY).toBe('number');
+  });
 });
+
 

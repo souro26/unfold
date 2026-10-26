@@ -57,19 +57,27 @@ export async function saveSettings(settings: Settings): Promise<void> {
   }
 }
 
+export interface ChatHistoryItem {
+  role: string;
+  content: string;
+}
+
 export async function sendMessage(
   prompt: string,
   conversationId?: string,
-  imageBase64?: string
+  imageBase64?: string,
+  history?: ChatHistoryItem[]
 ): Promise<string> {
   return await invoke<string>('send_message', {
     prompt,
     conversation_id: conversationId,
     image_base64: imageBase64,
+    history,
     request: {
       prompt,
       conversation_id: conversationId,
       image_base64: imageBase64,
+      history,
     },
   });
 }

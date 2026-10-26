@@ -111,3 +111,9 @@ export function importConversationsJSON(jsonString: string): boolean {
   }
 }
 
+export function getConversationHistory(convId: string): Message[] {
+  const list = loadConversations();
+  const conv = list.find((c) => c.id === convId);
+  return conv ? [...conv.messages] : [];
+}
+
