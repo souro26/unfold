@@ -648,15 +648,26 @@ export class BlackboardView {
       return { step: 1, title: '', explanation: '', elements: [] };
     }
     const safeIndex = Math.max(0, Math.min(this.currentSteps.length - 1, targetIndex));
+    const currentStep = this.currentSteps[safeIndex];
 
-    // Deduplicate elements by ID or semantic key so elements from previous scenes are NEVER stacked 2x, 3x, 4x
+    // If the current step already specifies 2 or more visual elements, it is a complete scene specification!
+    // Never stack elements from previous scenes 1, 2, 3 into step 4!
+    if (currentStep && currentStep.elements && currentStep.elements.length >= 2) {
+      const resolvedElements = this.resolveElementOverlaps(currentStep.elements);
+      return {
+        step: safeIndex + 1,
+        title: currentStep.title || '',
+        explanation: currentStep.explanation || '',
+        elements: resolvedElements,
+      };
+    }
+
+    // Fallback accumulation for incremental plans with 0-1 elements per step
     const elementMap = new Map<string, DrawingElement>();
-
     for (let i = 0; i <= safeIndex; i++) {
       const stepElements = this.currentSteps[i]?.elements;
       if (stepElements && Array.isArray(stepElements)) {
         for (const el of stepElements) {
-          // Identify element by unique id or semantic signature
           const key = el.id || `${el.type}_${el.text || ''}_${el.start?.x || 0}_${el.start?.y || 0}`;
           elementMap.set(key, el);
         }
@@ -668,8 +679,8 @@ export class BlackboardView {
 
     return {
       step: safeIndex + 1,
-      title: this.currentSteps[safeIndex]?.title || '',
-      explanation: this.currentSteps[safeIndex]?.explanation || '',
+      title: currentStep?.title || '',
+      explanation: currentStep?.explanation || '',
       elements: resolvedElements,
     };
   }
@@ -727,14 +738,47 @@ export class BlackboardView {
       }
     }
 
-    // 2. Prevent colliding cards or boxes from sitting on top of each other
+    // 2. Deduplicate near-identical elements or severe overlaps (>50% area overlap or same position)
+    const filtered: DrawingElement[] = [];
     for (let i = 0; i < resolved.length; i++) {
-      for (let j = i + 1; j < resolved.length; j++) {
-        const a = resolved[i];
-        const b = resolved[j];
+      const a = resolved[i];
+      let isDuplicate = false;
+      const b1 = getBBox(a);
+
+      for (let j = 0; j < filtered.length; j++) {
+        const b = filtered[j];
+        if (a.id.includes('frame') || b.id.includes('frame')) continue;
+
+        const b2 = getBBox(b);
+        const overlapX = Math.max(0, Math.min(b1.maxX, b2.maxX) - Math.max(b1.minX, b2.minX));
+        const overlapY = Math.max(0, Math.min(b1.maxY, b2.maxY) - Math.max(b1.minY, b2.minY));
+        const overlapArea = overlapX * overlapY;
+        const minArea = Math.min(b1.w * b1.h, b2.w * b2.h);
+
+        // If two elements share same type, have similar bounding sizes, and heavy overlap:
+        const sizeSimilar = Math.abs(b1.w - b2.w) < 40 && Math.abs(b1.h - b2.h) < 40;
+        if (a.type === b.type && sizeSimilar && minArea > 0 && overlapArea / minArea > 0.6) {
+          // Keep the newer one or the one with richer text
+          if ((a.text?.length || 0) >= (b.text?.length || 0)) {
+            filtered[j] = a; // Replace with the richer element
+          }
+          isDuplicate = true;
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        filtered.push(a);
+      }
+    }
+
+    // 3. Prevent remaining cards from sitting on top of each other
+    for (let i = 0; i < filtered.length; i++) {
+      for (let j = i + 1; j < filtered.length; j++) {
+        const a = filtered[i];
+        const b = filtered[j];
         if (!a.start || !b.start) continue;
 
-        // Skip parent boundary frames (like univ_frame or envelopes)
         if (a.id.includes('frame') || b.id.includes('frame') || a.id.includes('envelope') || b.id.includes('envelope')) continue;
 
         const b1 = getBBox(a);
@@ -744,13 +788,12 @@ export class BlackboardView {
         const overlapY = Math.min(b1.maxY, b2.maxY) - Math.max(b1.minY, b2.minY);
 
         if (overlapX > 30 && overlapY > 20) {
-          // If both are cards in the footer zone (y >= 400), shift b horizontally so they sit side by side
+          // If both are cards in the footer zone (y >= 390), shift b horizontally so they sit side by side
           if (b1.minY >= 390 && b2.minY >= 390) {
             if (b.start.x <= a.start.x + 100) {
               b.start.x = Math.min(720, (a.start.x || 200) + (b1.w || 250) + 20);
             }
           } else if (Math.abs(b1.cx - b2.cx) < 50 && Math.abs(b1.cy - b2.cy) < 50) {
-            // Entities are placed at almost the exact same coordinates! Shift b horizontally
             b.start.x += 180;
             if (b.end) b.end.x += 180;
           }
@@ -758,7 +801,7 @@ export class BlackboardView {
       }
     }
 
-    return resolved;
+    return filtered;
   }
 
   public renderCurrentStep(): void {
@@ -1150,16 +1193,25 @@ export class BlackboardView {
 
       this.updateVideoTimelineUI();
 
-      // Check which scene corresponds to videoCurrentTime
-      const activeRangeIndex = this.sceneTimeRanges.findIndex(
-        (r) => this.videoCurrentTime >= r.start && this.videoCurrentTime < r.end
-      );
+      // If speech is currently speaking, do not force-jump scenes with the timer clock
+      if (!this.isMuted && SpeechService.isSpeaking()) {
+        const currentRange = this.sceneTimeRanges[this.currentStepIndex];
+        if (currentRange) {
+          // Clamp videoCurrentTime so it advances gracefully to near the end of the scene while speech narrates
+          this.videoCurrentTime = Math.min(this.videoCurrentTime, currentRange.end - 0.05);
+        }
+      } else {
+        // When muted or speech has completed, track active scene by time
+        const activeRangeIndex = this.sceneTimeRanges.findIndex(
+          (r) => this.videoCurrentTime >= r.start && this.videoCurrentTime < r.end
+        );
 
-      const targetIndex = activeRangeIndex >= 0 ? activeRangeIndex : (this.currentSteps.length - 1);
-      if (targetIndex !== this.currentStepIndex) {
-        this.currentStepIndex = targetIndex;
-        this.renderCurrentStep();
-        this.syncSpeechToCurrentScene();
+        const targetIndex = activeRangeIndex >= 0 ? activeRangeIndex : (this.currentSteps.length - 1);
+        if (targetIndex !== this.currentStepIndex) {
+          this.currentStepIndex = targetIndex;
+          this.renderCurrentStep();
+          this.syncSpeechToCurrentScene();
+        }
       }
 
       this.videoAnimFrameId = requestAnimationFrame(tick);
@@ -1249,33 +1301,46 @@ export class BlackboardView {
       this.playTimer = null;
     }
 
-    const currentRange = this.sceneTimeRanges[this.currentStepIndex];
-    const durationMs = ((currentRange?.duration || 3.5) * 1000) / this.playbackSpeed;
+    const isSpeechAvailable = !this.isMuted && SpeechService.isSupported();
 
-    this.playTimer = setTimeout(() => {
-      if (!this.isVideoPlaying) return;
-      if (this.currentStepIndex < this.currentSteps.length - 1) {
-        this.nextStep();
-      } else {
-        this.pauseVideoPlayback();
-      }
-    }, durationMs);
-
-    if (this.isMuted) {
+    if (!isSpeechAvailable) {
       SpeechService.stop();
+      // When muted or speech is unsupported, advance automatically using the calculated duration
+      const currentRange = this.sceneTimeRanges[this.currentStepIndex];
+      const durationMs = ((currentRange?.duration || 3.5) * 1000) / this.playbackSpeed;
+
+      this.playTimer = setTimeout(() => {
+        if (!this.isVideoPlaying) return;
+        if (this.currentStepIndex < this.currentSteps.length - 1) {
+          this.nextStep();
+        } else {
+          this.pauseVideoPlayback();
+        }
+      }, durationMs);
       return;
     }
 
+    // When NOT muted: Speech is the single master driver of scene transitions!
     const textToSpeak = `${step.title}. ${step.explanation}`;
     SpeechService.speak(textToSpeak, {
       rate: this.playbackSpeed,
       onStart: () => {
         if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Speaking...';
       },
+      onChunkStart: (chunkText) => {
+        // Real-time subtitle sync with the exact sentence chunk being spoken
+        if (this.videoSubtitlesText) {
+          this.videoSubtitlesText.textContent = chunkText;
+        }
+      },
       onEnd: () => {
         if (this.stepVoiceBtn) this.stepVoiceBtn.textContent = 'Narrate';
-        if (this.isVideoPlaying && this.playTimer) {
-          clearTimeout(this.playTimer);
+        if (this.videoSubtitlesText) {
+          this.videoSubtitlesText.textContent = step.explanation;
+        }
+        if (this.isVideoPlaying) {
+          if (this.playTimer) clearTimeout(this.playTimer);
+          // Natural 700ms pedagogical breath before advancing to the next scene
           this.playTimer = setTimeout(() => {
             if (!this.isVideoPlaying) return;
             if (this.currentStepIndex < this.currentSteps.length - 1) {
@@ -1283,7 +1348,7 @@ export class BlackboardView {
             } else {
               this.pauseVideoPlayback();
             }
-          }, 800 / this.playbackSpeed);
+          }, 700 / this.playbackSpeed);
         }
       },
       onError: () => {

@@ -9,6 +9,7 @@ export interface SpeechOptions {
   onStart?: () => void;
   onEnd?: () => void;
   onError?: (err: any) => void;
+  onChunkStart?: (chunk: string, index: number, total: number) => void;
 }
 
 export interface SpeechLanguage {
@@ -22,6 +23,7 @@ export class SpeechService {
   private static selectedVoice: SpeechSynthesisVoice | null = null;
   private static selectedLang: string = 'en-US';
   private static currentAudio: HTMLAudioElement | null = null;
+  private static activeSessionId: number = 0;
 
   static {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -137,13 +139,44 @@ export class SpeechService {
       .trim();
   }
 
+  /**
+   * Split text into expressive sentence and thought chunks for natural human pacing
+   */
+  public static splitIntoNaturalChunks(text: string): string[] {
+    const clean = this.parseSSML(text);
+    if (!clean) return [];
+
+    // Split on sentence boundaries: periods, question marks, exclamation marks, colons, or newlines
+    const rawChunks = clean.match(/[^.!?:\n]+(?:[.!?:\n]+|$)/g) || [clean];
+    const result: string[] = [];
+
+    for (const chunk of rawChunks) {
+      const trimmed = chunk.trim();
+      if (!trimmed) continue;
+
+      // If a single sentence is long (> 18 words) and contains clauses separated by commas/semicolons, sub-split
+      const words = trimmed.split(/\s+/);
+      if (words.length > 18 && /[,;]/.test(trimmed)) {
+        const subParts = trimmed.split(/(?<=[,;])\s+/);
+        for (const sub of subParts) {
+          const s = sub.trim();
+          if (s) result.push(s);
+        }
+      } else {
+        result.push(trimmed);
+      }
+    }
+    return result;
+  }
+
   static async speak(text: string, options: SpeechOptions = {}): Promise<void> {
     const cleanText = this.parseSSML(text);
     if (!cleanText) return;
 
     this.stop();
+    const sessionId = this.activeSessionId;
 
-    // 1. Try NVIDIA Neural TTS if enabled & configured
+    // 1. Try Neural / Cloud TTS if configured
     try {
       const settings = await getSettings();
       const isNeuralConfigured = settings.tts_provider !== 'system' && (
@@ -156,17 +189,22 @@ export class SpeechService {
           voice: options.voiceName || 'alloy',
         });
         if (audioData) {
+          if (sessionId !== this.activeSessionId) return;
           const audio = new Audio(audioData);
           this.currentAudio = audio;
           if (options.onStart) options.onStart();
           audio.onended = () => {
             this.currentAudio = null;
-            if (options.onEnd) options.onEnd();
+            if (sessionId === this.activeSessionId && options.onEnd) {
+              options.onEnd();
+            }
           };
           audio.onerror = (e) => {
             console.warn('Audio playback error, falling back to Web Speech:', e);
             this.currentAudio = null;
-            this.speakWithWebSpeech(cleanText, options);
+            if (sessionId === this.activeSessionId) {
+              this.speakWithWebSpeech(cleanText, options);
+            }
           };
           await audio.play();
           return;
@@ -176,37 +214,122 @@ export class SpeechService {
       // Gracefully fall back to local browser speech synthesis
     }
 
-    // 2. Fallback to browser Web Speech API
+    // 2. Fallback to Expressive Web Speech API with sentence chunking & natural pauses
     this.speakWithWebSpeech(cleanText, options);
   }
 
   public static speakWithWebSpeech(cleanText: string, options: SpeechOptions = {}): void {
-    if (!this.synth) return;
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = options.rate ?? 1.0;
-    utterance.pitch = options.pitch ?? 1.0;
-
-    const targetLang = options.lang || this.selectedLang || this.detectLanguage(cleanText);
-    utterance.lang = targetLang;
-
-    if (options.voiceName) {
-      const v = this.getVoices().find((voice) => voice.name === options.voiceName);
-      if (v) utterance.voice = v;
-    } else if (this.selectedVoice && this.selectedVoice.lang.toLowerCase().startsWith(targetLang.split('-')[0].toLowerCase())) {
-      utterance.voice = this.selectedVoice;
-    } else {
-      const best = this.getBestVoiceForLang(targetLang);
-      if (best) utterance.voice = best;
+    if (!this.synth) {
+      options.onEnd?.();
+      return;
     }
 
-    if (options.onStart) utterance.onstart = () => options.onStart!();
-    if (options.onEnd) utterance.onend = () => options.onEnd!();
-    if (options.onError) utterance.onerror = (e) => options.onError!(e);
+    const chunks = this.splitIntoNaturalChunks(cleanText);
+    if (chunks.length === 0) {
+      options.onEnd?.();
+      return;
+    }
 
-    this.synth.speak(utterance);
+    const sessionId = this.activeSessionId;
+    let chunkIndex = 0;
+    let started = false;
+
+    const playNextChunk = () => {
+      if (sessionId !== this.activeSessionId) return;
+
+      if (chunkIndex >= chunks.length) {
+        if (sessionId === this.activeSessionId) {
+          options.onEnd?.();
+        }
+        return;
+      }
+
+      const chunk = chunks[chunkIndex];
+      const isQuestion = chunk.endsWith('?');
+      const isExclamation = chunk.endsWith('!') || /^(notice|look at|remember|observe|watch|why)/i.test(chunk);
+      const isInvariant = /(takeaway|golden rule|rule|invariant|formula|summary|guarantee)/i.test(chunk);
+
+      // Expressive Pitch & Rate Modulation:
+      // Questions go slightly up (1.05) with inquisitive teacher tone
+      // Exclamations/insights go up (1.03) with lively presence
+      // Takeaway/invariant rules go grounded and calm (0.96)
+      let pitch = options.pitch ?? 1.0;
+      let rate = options.rate ?? 1.0;
+
+      if (isQuestion) {
+        pitch = Math.min(1.2, pitch * 1.05);
+        rate = Math.max(0.85, rate * 0.98);
+      } else if (isExclamation) {
+        pitch = Math.min(1.2, pitch * 1.03);
+        rate = Math.min(1.15, rate * 1.02);
+      } else if (isInvariant) {
+        pitch = Math.max(0.85, pitch * 0.96);
+        rate = Math.max(0.85, rate * 0.96);
+      }
+
+      const utterance = new SpeechSynthesisUtterance(chunk);
+      utterance.rate = rate;
+      utterance.pitch = pitch;
+
+      const targetLang = options.lang || this.selectedLang || this.detectLanguage(chunk);
+      utterance.lang = targetLang;
+
+      if (options.voiceName) {
+        const v = this.getVoices().find((voice) => voice.name === options.voiceName);
+        if (v) utterance.voice = v;
+      } else if (this.selectedVoice && this.selectedVoice.lang.toLowerCase().startsWith(targetLang.split('-')[0].toLowerCase())) {
+        utterance.voice = this.selectedVoice;
+      } else {
+        const best = this.getBestVoiceForLang(targetLang);
+        if (best) utterance.voice = best;
+      }
+
+      utterance.onstart = () => {
+        if (sessionId !== this.activeSessionId) return;
+        if (!started) {
+          started = true;
+          options.onStart?.();
+        }
+        options.onChunkStart?.(chunk, chunkIndex, chunks.length);
+      };
+
+      utterance.onend = () => {
+        if (sessionId !== this.activeSessionId) return;
+        chunkIndex++;
+
+        // Natural micro-pauses between sentences/clauses
+        let pauseMs = 320;
+        if (isQuestion) pauseMs = 520;       // Reflective pause after asking student a question
+        else if (isExclamation) pauseMs = 420; // Emphasize key observation
+        else if (chunk.endsWith(',') || chunk.endsWith(';')) pauseMs = 180; // Natural breath
+        else if (isInvariant) pauseMs = 450; // Pause after invariant card
+
+        const adjustedPause = pauseMs / (options.rate ?? 1.0);
+
+        setTimeout(() => {
+          if (sessionId === this.activeSessionId) {
+            playNextChunk();
+          }
+        }, adjustedPause);
+      };
+
+      utterance.onerror = (e) => {
+        if (sessionId !== this.activeSessionId) return;
+        // Canceled or interrupted utterances during scene switch are normal
+        if (e.error === 'canceled' || e.error === 'interrupted') return;
+        console.warn('SpeechSynthesis error on chunk:', e);
+        chunkIndex++;
+        playNextChunk();
+      };
+
+      this.synth!.speak(utterance);
+    };
+
+    playNextChunk();
   }
 
   static stop(): void {
+    this.activeSessionId++;
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio = null;

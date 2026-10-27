@@ -249,12 +249,13 @@ export class AgentOrchestrator {
 
     // 1. Classify domain
     let domain: PedagogySpec['domain'] = 'general';
-    const isSoftware = /(python|javascript|typescript|rust|golang|c\+\+|java\b|code|coding|software|program|script|function\s+in|def\s+|variable|parameter|argument|return\s+value|for\s+loop|while\s+loop|class\s+|object|method)/i.test(p);
+    const isMath = /(tangent|derivative|calculus|integral|curve|circle|geometry|triangle|vector|sine|cosine|math|mathematics|algebra|matrix|tensor|parabola|set|union|intersection|venn|subset|probability|logic|combinatorics|permutation|discrete|statistic|domain|codomain|bijection|injection|surjection|relation)/i.test(p);
+    const isCodingExplicit = !isMath && /(python|javascript|typescript|rust|golang|c\+\+|java\b|coding|software|code\b|script\b|def\s+|class\s+|variable|parameter|argument|return\s+value|for\s+loop|while\s+loop|method)/i.test(p);
 
-    if (isSoftware) {
-      domain = 'algorithms';
-    } else if (/(tangent|derivative|calculus|integral|curve|circle|geometry|triangle|vector|sine|cosine|math|algebra|matrix|tensor|parabola|set|union|intersection|venn|subset|probability|logic|combinatorics|permutation|discrete|statistic)/i.test(p)) {
+    if (isMath) {
       domain = 'mathematics';
+    } else if (isCodingExplicit) {
+      domain = 'algorithms';
     } else if (/(tree|binary|sort|recursion|algorithm|graph|stack|queue|hash|search|array|linked\s*list|dynamic\s*programming|heap)/i.test(p)) {
       domain = 'algorithms';
     } else if (/(system|microservice|client|server|database|distributed|network|api|architecture|consensus|cache|docker|kubernetes|raft|paxos|failover)/i.test(p)) {
@@ -268,8 +269,54 @@ export class AgentOrchestrator {
       .replace(/[?!.]/g, '')
       .trim() || 'Concept Overview';
 
-    // Dedicated Software / Programming Function Pedagogy
-    if (isSoftware && /(function|def\s+|method|routine)/i.test(p)) {
+    // Dedicated Mathematical Function Pedagogy (Domain, Codomain, Unique Mapping, Vertical Line Test)
+    if (domain === 'mathematics' && /(function|mapping|domain|codomain|bijection|injection|surjection|relation)/i.test(p)) {
+      return {
+        concept: followUpType === 'simpler' ? 'Mathematical Functions (Simple Intuition)' : 'Mathematical Functions & Mappings',
+        domain: 'mathematics',
+        coreIntuition: followUpType === 'simpler'
+          ? 'Imagine a magic vending machine: every time you press button 1, you ALWAYS get a specific soda. It never gives you two different sodas at once. That predictable, single-output rule is what makes it a function.'
+          : 'A mathematical function f: X → Y is a deterministic relation between two sets where EVERY input x in Domain X is mapped to EXACTLY ONE output y in Codomain Y. An input can never split or produce multiple outputs.',
+        commonMisconceptions: [
+          'Confusing a general relation with a function (failing the Vertical Line Test: one input mapping to two outputs is NOT a function)',
+          'Believing two different inputs cannot share the same output (e.g., (-2)² = 4 and 2² = 4 is completely valid and common)',
+          'Assuming a function requires an algebraic formula rather than an arbitrary well-defined mapping table or relation',
+        ],
+        progressionStages: [
+          {
+            stageNumber: 1,
+            title: 'Visual Foundation: Two Sets — Domain X and Codomain Y',
+            objective: 'Draw the input set Domain X on the left and target set Codomain Y on the right with concrete elements {1, 2, 3} and {2, 4, 6}.',
+            narrationScript:
+              'Look at the board: to truly understand a mathematical function, we start with two separate worlds. On the left in cyan is our Domain, Set X, containing our inputs: 1, 2, and 3. On the right in emerald is our Codomain, Set Y, holding our possible outputs: 2, 4, and 6. A function is simply the bridge that connects these two sets.',
+          },
+          {
+            stageNumber: 2,
+            title: 'Core Concept in Action: Deterministic Mapping f(x) = y',
+            objective: 'Draw directional mapping arrows from each Domain element to exactly one Codomain element f(1)=2, f(2)=4, f(3)=6.',
+            narrationScript:
+              'Now, watch our function f in action. Look at the arrows: 1 maps to 2, 2 maps to 4, and 3 maps to 6. Notice the ironclad rule of mathematics: every input in Set X shoots out exactly one arrow! No input is left behind, and no input is indecisive. This single-output guarantee is what makes f deterministic.',
+          },
+          {
+            stageNumber: 3,
+            title: 'Critical Contrast: Function vs Non-Function (Vertical Line Test)',
+            objective: 'Illustrate the classic failure case: an input splitting to two outputs, and contrast with the curve Vertical Line Test.',
+            narrationScript:
+              'Why is that single-arrow rule so crucial? Look at the contrast badge at the top right: what if input 1 tried to shoot arrows to both 2 AND 4? In mathematics, that is a relation, but it fails to be a function! On a graph, this is the famous Vertical Line Test: if a vertical line slices a curve at more than one point, it fails to be a function.',
+          },
+          {
+            stageNumber: 4,
+            title: 'Universal Invariant: f: X → Y Uniqueness Guarantee',
+            objective: 'Display the definitive mathematical invariant card: f: X → Y (Each x ∈ X maps to a unique y ∈ Y).',
+            narrationScript:
+              'And here is your definitive golden rule across the bottom of the board: A function is a rule of strict determinism. Multiple inputs can land on the same output—like negative 2 squared and positive 2 squared both equaling 4—but a single input can NEVER split into multiple outputs!',
+          },
+        ],
+      };
+    }
+
+    // Dedicated Software / Programming Function Pedagogy (Only for explicit coding context)
+    if (domain === 'algorithms' && isCodingExplicit && /(function|def\s+|method|routine)/i.test(p)) {
       return {
         concept: followUpType === 'simpler' ? 'Functions in Programming (Simple Intuition)' : (/(python)/i.test(p) ? 'Functions in Python' : 'Functions in Programming'),
         domain: 'algorithms',
@@ -675,6 +722,10 @@ export class AgentOrchestrator {
       highlight: '#ff5555', // Coral (velocity vectors, key warnings)
       text: '#f8f8f2', // Crisp Chalk White
     };
+
+    if (pedagogy.domain === 'mathematics' && /(function|mapping|domain|codomain)/i.test(pedagogy.concept)) {
+      return this.buildMathFunctionSpatialBlueprint(origin, palette, pedagogy);
+    }
 
     if (pedagogy.domain === 'mathematics' && /tangent/i.test(pedagogy.concept)) {
       return this.buildTangentSpatialBlueprint(origin, palette, pedagogy);
@@ -1128,6 +1179,64 @@ export class AgentOrchestrator {
     };
   }
 
+  private buildMathFunctionSpatialBlueprint(origin: Point, palette: any, pedagogy: PedagogySpec): SpatialBlueprint {
+    const leftX = 230;
+    const rightX = 670;
+
+    // Header Zone: y = 65 .. 120
+    // Focal Zone: y = 150 .. 390 (Domain on left, Codomain on right, arrows in center)
+    // Footer Zone: y = 415 .. 475 (Invariant card)
+
+    // Scene 1: Domain (Set X) on left with items 1, 2, 3; Codomain (Set Y) on right with items 2, 4, 6
+    const step1: DrawingElement[] = [
+      { id: 'badge_title', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.08)', strokeWidth: 1.5, start: { x: 120, y: 65 }, width: 340, height: 45, text: 'Mathematical Function: f: X → Y' },
+      // Domain Oval / Capsule on Left
+      { id: 'domain_box', type: 'rect', color: palette.primary, fill: 'rgba(0, 240, 255, 0.06)', strokeWidth: 2.5, start: { x: leftX - 70, y: 150 }, width: 150, height: 215, text: 'Domain (Set X)' },
+      { id: 'in_pt1', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: leftX, y: 195 }, radius: 14, text: '1' },
+      { id: 'in_pt2', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: leftX, y: 255 }, radius: 14, text: '2' },
+      { id: 'in_pt3', type: 'circle', color: palette.primary, strokeWidth: 2, start: { x: leftX, y: 315 }, radius: 14, text: '3' },
+      // Codomain Oval / Capsule on Right
+      { id: 'codomain_box', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.06)', strokeWidth: 2.5, start: { x: rightX - 70, y: 150 }, width: 150, height: 215, text: 'Codomain (Set Y)' },
+      { id: 'out_pt1', type: 'circle', color: palette.secondary, strokeWidth: 2, start: { x: rightX, y: 195 }, radius: 14, text: '2' },
+      { id: 'out_pt2', type: 'circle', color: palette.secondary, strokeWidth: 2, start: { x: rightX, y: 255 }, radius: 14, text: '4' },
+      { id: 'out_pt3', type: 'circle', color: palette.secondary, strokeWidth: 2, start: { x: rightX, y: 315 }, radius: 14, text: '6' },
+    ];
+
+    // Scene 2: Deterministic Mapping Arrows f(x) = 2x across the center
+    const step2: DrawingElement[] = [
+      ...step1,
+      { id: 'map_arr1', type: 'arrow', color: palette.accent, strokeWidth: 3, start: { x: leftX + 25, y: 195 }, end: { x: rightX - 25, y: 195 }, text: 'f(1) = 2' },
+      { id: 'map_arr2', type: 'arrow', color: palette.accent, strokeWidth: 3, start: { x: leftX + 25, y: 255 }, end: { x: rightX - 25, y: 255 }, text: 'f(2) = 4' },
+      { id: 'map_arr3', type: 'arrow', color: palette.accent, strokeWidth: 3, start: { x: leftX + 25, y: 315 }, end: { x: rightX - 25, y: 315 }, text: 'f(3) = 6' },
+      { id: 'rule_badge', type: 'rect', color: palette.accent, fill: 'rgba(189, 147, 249, 0.12)', strokeWidth: 1.5, start: { x: 335, y: 145 }, width: 230, height: 40, text: 'Rule: f(x) = 2x (Deterministic)' },
+    ];
+
+    // Scene 3: Contrast with Non-Function (Split arrow failing Vertical Line Test)
+    const step3: DrawingElement[] = [
+      ...step2,
+      { id: 'contrast_badge', type: 'rect', color: palette.highlight, fill: 'rgba(255, 85, 85, 0.12)', strokeWidth: 1.5, start: { x: 500, y: 65 }, width: 340, height: 45, text: 'Contrast: Relation vs Function (Vertical Line Test)' },
+      { id: 'fail_arrow', type: 'arrow', color: palette.highlight, strokeWidth: 2.5, start: { x: leftX + 25, y: 195 }, end: { x: rightX - 25, y: 255 }, text: 'Split? 1 → 4 (FAILS)' },
+      { id: 'fail_card', type: 'rect', color: palette.highlight, fill: 'rgba(255, 85, 85, 0.15)', strokeWidth: 1.5, start: { x: 340, y: 365 }, width: 220, height: 40, text: 'Violates: 1 input → 2 outputs' },
+    ];
+
+    // Scene 4: Definitive Invariant Card
+    const step4: DrawingElement[] = [
+      ...step3,
+      { id: 'invariant_card', type: 'rect', color: palette.secondary, fill: 'rgba(80, 250, 123, 0.16)', strokeWidth: 2, start: { x: 160, y: 420 }, width: 580, height: 50, text: 'Golden Invariant: Every x ∈ X maps to EXACTLY ONE y ∈ Y. Deterministic!' },
+    ];
+
+    return {
+      coordinateFrame: { origin, width: 900, height: 560, showAxes: false },
+      colorPalette: palette,
+      stepBlueprints: [
+        { stepNumber: 1, title: pedagogy.progressionStages[0]?.title || 'Foundation: Sets X & Y', explanation: pedagogy.progressionStages[0]?.narrationScript || '', elements: step1 },
+        { stepNumber: 2, title: pedagogy.progressionStages[1]?.title || 'Deterministic Mapping', explanation: pedagogy.progressionStages[1]?.narrationScript || '', elements: step2 },
+        { stepNumber: 3, title: pedagogy.progressionStages[2]?.title || 'Vertical Line Test / Contrast', explanation: pedagogy.progressionStages[2]?.narrationScript || '', elements: step3 },
+        { stepNumber: 4, title: pedagogy.progressionStages[3]?.title || 'Uniqueness Invariant', explanation: pedagogy.progressionStages[3]?.narrationScript || '', elements: step4 },
+      ],
+    };
+  }
+
   private buildGeneralSpatialBlueprint(origin: Point, palette: any, pedagogy: PedagogySpec): SpatialBlueprint {
     // Universal Clean Layout Blueprint:
     // Header Zone: y = 65 .. 120 (Title badges, context callouts)
@@ -1225,6 +1334,8 @@ INSTRUCTIONS FOR DRAWING AGENT & VOICE TEACHER:
 1. DELIVER A MASTER-TEACHER LESSON:
    Your spoken narration (both in Markdown headers ### Step X: and in the JSON "explanation" field) MUST BE LITERALLY WHAT A MASTER TEACHER (like 3Blue1Brown or Feynman) SPEAKS ALOUD DIRECTLY TO A STUDENT at the blackboard.
    - Speak in the warm, conversational second person: "Look at the board: we start with...", "Notice what happens when...", "Why does this matter? Because...".
+   - DOMAIN CONSISTENCY: If the domain is MATHEMATICS, NEVER speak about Python, \`def\`, coding variables, or software syntax! Teach the pure mathematical intuition, sets, mappings, curves, or geometry.
+   - EMOTIONAL PAUSES & PACING: Punctuate your speech naturally with questions (?), exclamations (!), and commas (,). The speech engine pauses and modulates pitch on punctuation to produce warm, human pacing.
    - NEVER use robotic developer engineering commands (like "Establish entity...", "Render diagram...").
    - Do NOT worry about video or narration length: make each step's spoken explanation as rich, complete, and thorough as necessary to genuinely teach the concept.
 
