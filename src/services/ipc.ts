@@ -94,10 +94,10 @@ export async function sendMessage(
   }
 
   // Web Browser Fallback: Direct CORS fetch to configured LLM provider
-  return await sendWebDirectMessage(prompt);
+  return await sendWebDirectMessage(prompt, imageBase64);
 }
 
-async function sendWebDirectMessage(prompt: string): Promise<string> {
+async function sendWebDirectMessage(prompt: string, imageBase64?: string): Promise<string> {
   try {
     const settings = await getSettings();
     const apiKey = settings.api_key;
@@ -105,13 +105,45 @@ async function sendWebDirectMessage(prompt: string): Promise<string> {
 
     let endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
     let model = settings.model || 'nvidia/nemotron-3.5-bolt-e4b';
-    if (settings.llm_provider === 'groq') {
-      endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-      model = settings.model || 'llama-3.3-70b-versatile';
-    } else if (settings.llm_provider === 'openai') {
-      endpoint = 'https://api.openai.com/v1/chat/completions';
-      model = settings.model || 'gpt-4o';
+
+    const hasImage = Boolean(imageBase64 && imageBase64.length > 50);
+
+    if (hasImage) {
+      if (settings.llm_provider === 'nvidia' || !settings.llm_provider) {
+        endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
+        model = 'nvidia/nemotron-3.5-super-vl-120b-a12b';
+      } else if (settings.llm_provider === 'groq') {
+        endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+        model = 'llama-3.2-11b-vision-preview';
+      } else if (settings.llm_provider === 'openai') {
+        endpoint = 'https://api.openai.com/v1/chat/completions';
+        model = 'gpt-4o';
+      }
+    } else {
+      if (settings.llm_provider === 'groq') {
+        endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+        model = settings.model || 'llama-3.3-70b-versatile';
+      } else if (settings.llm_provider === 'openai') {
+        endpoint = 'https://api.openai.com/v1/chat/completions';
+        model = settings.model || 'gpt-4o';
+      }
     }
+
+    // Standard multimodal user message payload
+    const userContent = hasImage
+      ? [
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${imageBase64}`,
+            },
+          },
+          {
+            type: 'text',
+            text: `[SCREEN OBSERVATION CONTEXT]\nCarefully analyze what is on the user's screen (code, UI layout, diagrams, text, or errors).\n\nUser Question:\n${prompt}`,
+          },
+        ]
+      : prompt;
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -121,7 +153,7 @@ async function sendWebDirectMessage(prompt: string): Promise<string> {
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [{ role: 'user', content: userContent }],
         temperature: settings.temperature ?? 0.7,
       }),
     });
