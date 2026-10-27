@@ -7,7 +7,7 @@ import {
   setActiveConversationId,
   deleteConversation,
 } from './services/storage';
-import { setClickThrough, toggleOverlay, captureScreen } from './services/ipc';
+import { setClickThrough, toggleOverlay } from './services/ipc';
 import { renderMarkdown } from './utils/markdown';
 import { formatTime } from './utils/helpers';
 import { SidebarComponent } from './components/Sidebar';
@@ -219,8 +219,7 @@ export class App {
     let screenImageBase64: string | undefined = undefined;
     if (this.screenTeachView.isActive()) {
       try {
-        const capture = await captureScreen();
-        screenImageBase64 = capture.image_base64;
+        screenImageBase64 = await this.screenTeachView.captureCurrentFrame();
       } catch (err) {
         console.warn('Screen capture failed:', err);
       }

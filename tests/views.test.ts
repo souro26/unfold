@@ -13,6 +13,18 @@ describe('Views and Navigation', () => {
         <button id="blackboardMode"></button>
       </div>
       <div class="app"></div>
+      <div class="screen-teach-container" id="screenTeachContainer">
+        <video class="screen-teach-video" id="screenTeachVideo"></video>
+        <div class="screen-teach-status-pill" id="screenTeachStatusPill">
+          <span class="pulse-indicator"></span>
+          <span id="screenTeachStatusText">Observing Screen</span>
+          <button id="screenTeachChangeBtn"></button>
+        </div>
+        <div class="screen-teach-prompt-card" id="screenTeachPromptCard">
+          <p>Select screen</p>
+          <button id="screenTeachGrantBtn"></button>
+        </div>
+      </div>
       <div id="vizOverlay" class="visualization-overlay">
         <canvas id="vizCanvas"></canvas>
         <button id="vizRenderModeBtn"><span id="vizRenderModeLabel">🎨 Chalkboard</span></button>
@@ -71,6 +83,57 @@ describe('Views and Navigation', () => {
     expect(screenView.isActive()).toBe(false);
     expect(document.body.classList.contains('screen-overlay-mode')).toBe(false);
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('ScreenTeachView manages live screen sharing stream and handles stream ending', async () => {
+    const onExit = vi.fn();
+    const screenView = new ScreenTeachView({ onExit });
+
+    const mockTrack = {
+      stop: vi.fn(),
+      addEventListener: vi.fn(),
+      onended: null as any,
+    };
+    const mockStream = {
+      active: true,
+      getVideoTracks: vi.fn().mockReturnValue([mockTrack]),
+      getTracks: vi.fn().mockReturnValue([mockTrack]),
+    };
+
+    // Mock navigator.mediaDevices.getDisplayMedia
+    const originalMediaDevices = navigator.mediaDevices;
+    (navigator as any).mediaDevices = {
+      getDisplayMedia: vi.fn().mockResolvedValue(mockStream),
+    };
+
+    const statusPill = document.getElementById('screenTeachStatusPill');
+    const promptCard = document.getElementById('screenTeachPromptCard');
+    const video = document.getElementById('screenTeachVideo') as HTMLVideoElement;
+    if (video) {
+      video.play = vi.fn().mockResolvedValue(undefined);
+    }
+
+    await screenView.enter();
+    expect(screenView.isActive()).toBe(true);
+    expect(statusPill?.classList.contains('active')).toBe(true);
+    expect(promptCard?.classList.contains('hidden')).toBe(true);
+    expect(video?.classList.contains('has-stream')).toBe(true);
+
+    // Simulate user ending stream from browser banner
+    if (mockTrack.onended) {
+      mockTrack.onended(new Event('ended'));
+    }
+    expect(statusPill?.classList.contains('active')).toBe(false);
+    expect(promptCard?.classList.contains('hidden')).toBe(false);
+
+    // Re-share and test exit() stopping active tracks
+    await screenView.requestScreenShare();
+    expect(statusPill?.classList.contains('active')).toBe(true);
+    screenView.exit();
+    expect(screenView.isActive()).toBe(false);
+    expect(mockTrack.stop).toHaveBeenCalled();
+
+    (navigator as any).mediaDevices = originalMediaDevices;
   });
 
   it('BlackboardView opens steps and navigates between steps', async () => {

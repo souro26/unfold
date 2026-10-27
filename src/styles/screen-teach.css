@@ -150,3 +150,170 @@ body.screen-overlay-mode .message.user .message-content {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+
+/* ── Screen Teach Live Stream & Viewport ──────────────────────── */
+.screen-teach-container {
+  display: none;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 10;
+  background: #0f0f12;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+}
+
+body.screen-overlay-mode .screen-teach-container {
+  display: flex;
+}
+
+.screen-teach-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #09090b;
+  display: none;
+}
+
+.screen-teach-video.has-stream {
+  display: block;
+}
+
+/* ── Observing Screen Live Status Pill ── */
+.screen-teach-status-pill {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 260;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: rgba(18, 18, 22, 0.88);
+  border: 1px solid rgba(0, 212, 170, 0.45);
+  color: #ececec;
+  font-size: 13px;
+  font-weight: 500;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.screen-teach-status-pill.active {
+  display: flex;
+}
+
+.screen-teach-status-pill .pulse-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00d4aa;
+  box-shadow: 0 0 10px #00d4aa;
+  animation: pulse-screen-indicator 1.8s infinite;
+}
+
+@keyframes pulse-screen-indicator {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+
+.screen-teach-status-pill .pill-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ececec;
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.screen-teach-status-pill .pill-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* ── Screen Teach Prompt Card (When waiting for permission) ── */
+.screen-teach-prompt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 480px;
+  margin: 0 24px;
+  padding: 36px 32px;
+  background: rgba(24, 24, 28, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  z-index: 20;
+  pointer-events: auto;
+  animation: prompt-fade-in 0.25s ease;
+}
+
+@keyframes prompt-fade-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.screen-teach-prompt-card.hidden {
+  display: none !important;
+}
+
+.screen-teach-prompt-card .prompt-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
+  background: rgba(0, 212, 170, 0.12);
+  border: 1px solid rgba(0, 212, 170, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00d4aa;
+  margin-bottom: 20px;
+}
+
+.screen-teach-prompt-card h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 10px;
+}
+
+.screen-teach-prompt-card p {
+  font-size: 14px;
+  color: #a0a0a0;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.screen-teach-grant-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: #00d4aa;
+  color: #121214;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(0, 212, 170, 0.3);
+}
+
+.screen-teach-grant-btn:hover {
+  background: #00f0c0;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(0, 212, 170, 0.45);
+}
+

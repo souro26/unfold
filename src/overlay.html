@@ -100,6 +100,35 @@
         <span>AI Agent</span>
       </button>
 
+      <!-- Screen Teach Live Viewport / Media Feed -->
+      <div class="screen-teach-container" id="screenTeachContainer">
+        <video class="screen-teach-video" id="screenTeachVideo" autoplay playsinline muted></video>
+        <div class="screen-teach-status-pill" id="screenTeachStatusPill">
+          <span class="pulse-indicator"></span>
+          <span id="screenTeachStatusText">Observing Screen</span>
+          <button id="screenTeachChangeBtn" class="pill-btn" title="Change Screen / Window">Change</button>
+        </div>
+        <div class="screen-teach-prompt-card" id="screenTeachPromptCard">
+          <div class="prompt-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8" />
+              <path d="M12 17v4" />
+            </svg>
+          </div>
+          <h2>Observing Your Screen</h2>
+          <p>Select your screen, application window, or browser tab so Unfold can visually see and explain whatever you are viewing.</p>
+          <button id="screenTeachGrantBtn" class="screen-teach-grant-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span>Share Screen / Window</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Main Workspace Area -->
       <div class="conversation-area" id="conversationArea">
         <!-- Empty State / Welcome Screen -->
