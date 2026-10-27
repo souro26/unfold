@@ -1,13 +1,17 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  base: './',
   root: 'src',
   publicDir: '../public',
   build: {
     outDir: '../dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: { main: 'src/overlay.html' },
+      input: {
+        index: 'src/index.html',
+        overlay: 'src/overlay.html',
+      },
     },
   },
   resolve: { alias: { '@': '/src' } },

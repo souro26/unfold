@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unfold</title>
+  
+  <!-- Modular Styles -->
+  <link rel="stylesheet" href="./styles/base.css">
+  <link rel="stylesheet" href="./styles/sidebar.css">
+  <link rel="stylesheet" href="./styles/chat.css">
+  <link rel="stylesheet" href="./styles/screen-teach.css">
+  <link rel="stylesheet" href="./styles/blackboard.css">
+  <link rel="stylesheet" href="./styles/settings.css">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
+        </div>
+        <span class="title">Unfold</span>
+        <button class="sidebar-btn click-through-toggle" id="clickThroughToggle"
+          aria-label="Toggle click-through (Ctrl+Shift+X)" title="Click-through: OFF (Ctrl+Shift+X to toggle)">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17.5 6.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 10.5-10.5a2.12 2.12 0 0 1 3 3z" />
+          </svg>
+          <span class="ct-label">Click-through</span>
+          <span class="ct-status" id="ctStatus">OFF</span>
+        </button>
+        <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="sidebar-actions">
+        <button class="sidebar-btn" id="newChatBtn" title="New chat (Ctrl+N)">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span class="label">New chat</span>
+          <span class="shortcut">Ctrl+N</span>
+        </button>
+        <button class="sidebar-btn" id="searchBtn" title="Search conversations (Ctrl+K)">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span class="label">Search</span>
+          <span class="shortcut">Ctrl+K</span>
+        </button>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Recent</div>
+        <div class="conversation-list" id="conversationList">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="sidebar-btn" id="settingsBtn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          <span class="label">Settings</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main" id="main">
+      <!-- Screen Teach Back Button (Top Left when in screen overlay mode) -->
+      <button class="screen-teach-back-btn" id="screenTeachBackBtn" title="Back to Home (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+        <span>Back to Home</span>
+      </button>
+
+      <!-- Screen Teach Agent Panel Toggle Button (Top Right when in screen overlay) -->
+      <button class="screen-agent-toggle-btn" id="screenAgentToggleBtn" title="Toggle AI Agent Panel (Ctrl+Shift+A)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        <span>AI Agent</span>
+      </button>
+
+      <!-- Main Workspace Area -->
+      <div class="conversation-area" id="conversationArea">
+        <!-- Empty State / Welcome Screen -->
+        <div class="empty-state" id="emptyState">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
+          <h1>What do you want to understand?</h1>
+          <p>Unfold explains concepts step by step and creates interactive visualizations to help you learn.</p>
+          <div class="teaching-modes" id="teachingModes">
+            <button class="mode-card" id="screenTeachMode" data-mode="screen">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <path d="M8 21h8" />
+                <path d="M12 17v4" />
+              </svg>
+              <span class="title">Teach me what's on my screen</span>
+              <span class="desc">Capture your screen and I'll explain what you're viewing</span>
+              <kbd class="shortcut">Ctrl+Shift+S</kbd>
+            </button>
+            <button class="mode-card" id="blackboardMode" data-mode="blackboard">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
+              </svg>
+              <span class="title">Teach me on the blackboard</span>
+              <span class="desc">Interactive diagrams, equations, and visual explanations</span>
+              <kbd class="shortcut">Ctrl+Shift+B</kbd>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- IDE-Style AI Agent Side Panel (Docked to the Right, available across all views) -->
+  <aside class="agent-panel" id="agentPanel" aria-label="AI Assistant Panel">
+    <div class="agent-panel-header">
+      <div class="agent-panel-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" />
+          <path d="M2 17l10 5 10-5" />
+          <path d="M2 12l10 5 10-5" />
+        </svg>
+        <span>Unfold Agent</span>
+      </div>
+      <div class="agent-panel-actions">
+        <button class="agent-panel-btn" id="agentPanelClearBtn" title="Clear Chat Messages">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+        </button>
+        <button class="agent-panel-btn" id="closeAgentPanelBtn" title="Close Panel (Ctrl+Shift+A)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="agent-panel-body" id="agentPanelBody">
+      <!-- Messages Container -->
+      <div class="messages" id="messages" style="display: none;"></div>
+    </div>
+
+    <!-- Chat Composer (Inside Agent Side Panel, hidden on opening page) -->
+    <div class="composer" id="composerContainer" style="display: none;">
+      <div class="composer-inner">
+        <div class="composer-wrapper" id="composerWrapper">
+          <textarea id="composerInput" placeholder="Message Unfold…" autocomplete="off" spellcheck="false" rows="1"></textarea>
+          <div class="composer-actions">
+            <button class="composer-btn" id="attachBtn" aria-label="Attach" title="Attach">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49" />
+              </svg>
+            </button>
+            <button class="composer-btn send" id="sendBtn" aria-label="Send message" title="Send (Enter)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polyline points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+            <button class="composer-btn overlay-close-trigger" id="overlayCloseTrigger" aria-label="Exit overlay mode" title="Exit overlay (Esc)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="composer-hint">Press <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Blackboard Visualization Overlay -->
+  <div class="visualization-overlay" id="vizOverlay">
+    <div class="viz-header">
+      <div class="viz-header-left">
+        <button class="viz-btn viz-back-btn" id="vizBackBtn" title="Back to Home Screen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          <span>Back to Home</span>
+        </button>
+        <div class="title" id="vizTitle">Visualization</div>
+      </div>
+      <div class="viz-actions">
+        <button class="viz-btn agent-toggle-btn" id="vizAgentToggleBtn" title="Toggle AI Agent Panel (Ctrl+Shift+A)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span>AI Agent</span>
+        </button>
+        <button class="viz-btn viz-inspect-btn" id="vizInspectBtn" title="Inspect Deep Reasoning, Blueprint & Canvas Coordinates">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+            <path d="M12 12L2.5 7.5" />
+            <path d="M12 12v10" />
+          </svg>
+          <span>Blueprint & Reasoning 🧠</span>
+        </button>
+        <button class="viz-btn viz-render-mode-btn" id="vizRenderModeBtn" title="Toggle Drawing Style: Chalkboard (Rough.js) vs Precision (Skia)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+            <circle cx="11" cy="11" r="2"/>
+          </svg>
+          <span id="vizRenderModeLabel">🎨 Chalkboard</span>
+        </button>
+        <button class="viz-btn" id="vizPresentation" aria-label="Presentation Mode" title="Presentation Mode (F5)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <polygon points="10 8 16 11 10 14 10 8" fill="currentColor" />
+          </svg>
+          <span>Present</span>
+        </button>
+        <div class="export-dropdown-container">
+          <button class="viz-btn" id="vizExportBtn" aria-label="Export Diagram" title="Export to Mermaid, Excalidraw, or PlantUML">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>Export</span>
+          </button>
+          <div class="export-menu hidden" id="exportMenu">
+            <button class="export-menu-item" id="exportMermaid">Mermaid (.mmd)</button>
+            <button class="export-menu-item" id="exportExcalidraw">Excalidraw (.excalidraw)</button>
+            <button class="export-menu-item" id="exportPlantUML">PlantUML (.puml)</button>
+            <button class="export-menu-item" id="exportManim">Manim (.py)</button>
+          </div>
+        </div>
+        <button class="viz-btn" id="vizFullscreen" aria-label="Fullscreen" title="Fullscreen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+        </button>
+        <button class="viz-btn" id="vizClose" aria-label="Close visualization">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="viz-body">
+      <div class="viz-canvas-container">
+        <canvas id="vizCanvas"></canvas>
+      </div>
+
+      <!-- Blueprint & Reasoning Inspector Drawer -->
+      <aside class="viz-inspect-drawer hidden" id="vizInspectDrawer" aria-label="Blackboard Blueprint and Deep Reasoning">
+        <div class="inspect-drawer-header">
+          <div class="inspect-drawer-title">
+            <span class="inspect-brain-icon">🧠</span>
+            <span>Reasoning & Canvas Blueprint</span>
+          </div>
+          <button class="inspect-close-btn" id="vizInspectCloseBtn" title="Close Drawer">✕</button>
+        </div>
+        <div class="inspect-drawer-tabs">
+          <button class="inspect-tab-btn active" id="inspectTabReasoningBtn" data-tab="reasoning">Deep Reasoning</button>
+          <button class="inspect-tab-btn" id="inspectTabElementsBtn" data-tab="elements">Step Elements (<span id="inspectElemCount">0</span>)</button>
+          <button class="inspect-tab-btn" id="inspectTabRawBtn" data-tab="raw">Raw Spec / JSON</button>
+        </div>
+        <div class="inspect-drawer-content">
+          <!-- Pane 1: Deep Reasoning -->
+          <div class="inspect-pane active" id="inspectPaneReasoning">
+            <div class="inspect-section-title">🧠 Pedagogical Strategy & Mental Model</div>
+            <div class="inspect-reasoning-body" id="inspectReasoningPedagogy"></div>
+            <div class="inspect-section-title">📐 Visual Geometry & Coordinate Architecture</div>
+            <div class="inspect-reasoning-body" id="inspectReasoningSpatial"></div>
+          </div>
+          <!-- Pane 2: Elements Table -->
+          <div class="inspect-pane" id="inspectPaneElements">
+            <div class="inspect-elements-header">
+              <span>Current Step Elements</span>
+              <span class="inspect-step-name" id="inspectCurrentStepTitle"></span>
+            </div>
+            <div class="inspect-elements-list" id="inspectElementsList"></div>
+          </div>
+          <!-- Pane 3: Raw JSON / Spec -->
+          <div class="inspect-pane" id="inspectPaneRaw">
+            <div class="inspect-raw-bar">
+              <span>Full Generated JSON Blueprint</span>
+              <button class="inspect-copy-code-btn" id="inspectCopyJsonBtn">Copy JSON</button>
+            </div>
+            <pre class="inspect-raw-code" id="inspectRawJsonText"></pre>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <!-- Video Stream Player Bar & Interactive Timeline Scrubber -->
+    <div class="video-stream-bar" id="videoStreamBar">
+      <!-- Live Video Subtitles Overlay -->
+      <div class="video-subtitles" id="videoSubtitles">
+        <span class="subtitles-icon">💬</span>
+        <span class="subtitles-text" id="videoSubtitlesText"></span>
+      </div>
+
+      <!-- Scrubber Timeline -->
+      <div class="video-timeline-container">
+        <div class="video-time" id="videoCurrentTime">00:00</div>
+        <div class="video-scrubber-track" id="videoScrubberTrack">
+          <div class="video-progress-fill" id="videoProgressFill"></div>
+          <input type="range" class="video-scrubber" id="videoScrubber" min="0" max="1000" value="0" step="1" title="Seek video stream" />
+        </div>
+        <div class="video-time" id="videoTotalTime">00:00</div>
+      </div>
+
+      <!-- Player Controls -->
+      <div class="video-player-controls">
+        <div class="video-controls-left">
+          <button class="video-ctrl-btn" id="videoPlayPauseBtn" title="Play / Pause Video (Space)">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" id="videoPlayIcon">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            <span id="videoPlayLabel">Pause</span>
+          </button>
+          <button class="video-ctrl-btn" id="videoReplayBtn" title="Replay from start">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+              <path d="M1 4v6h6M23 20v-6h-6"/>
+              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+            </svg>
+            <span>Restart</span>
+          </button>
+          <div class="video-scene-indicator" id="videoSceneIndicator">Scene 1 of 4</div>
+        </div>
+
+        <div class="video-controls-right">
+          <button class="video-ctrl-btn speed-btn" id="videoSpeedBtn" title="Change Playback Speed">1x</button>
+          <button class="video-ctrl-btn" id="videoMuteBtn" title="Mute / Unmute Audio">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" id="videoMuteIcon">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Hidden backward-compatibility elements for test suite -->
+        <div style="display:none;" aria-hidden="true">
+          <span id="stepIndicator">Step 1</span>
+          <span id="vizDescription"></span>
+          <button id="stepPrev"></button>
+          <button id="stepPlay">Autoplay</button>
+          <button id="stepNext"></button>
+          <button id="stepVoice">Narrate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Presentation HUD -->
+    <div class="presentation-hud" id="presentationHud">
+      <button class="hud-btn" id="hudPrev" title="Previous Step (Left Arrow)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+      </button>
+      <span class="hud-step-badge" id="hudStepBadge">Step 1 of 5</span>
+      <button class="hud-btn" id="hudPlay" title="Autoplay / Pause (Space)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" id="hudPlayIcon">
+          <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" />
+        </svg>
+      </button>
+      <button class="hud-btn" id="hudNext" title="Next Step (Right Arrow)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+      <div class="hud-divider"></div>
+      <button class="hud-btn" id="hudInspect" title="Blueprint & Reasoning (I)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+          <path d="M12 12L2.5 7.5" />
+          <path d="M12 12v10" />
+        </svg>
+      </button>
+      <button class="hud-btn" id="hudExit" title="Exit Presentation (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Application Bootstrap -->
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

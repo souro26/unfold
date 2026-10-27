@@ -2,11 +2,17 @@ import { invoke } from '@tauri-apps/api/core';
 import { Settings, ScreenCaptureRequest, ScreenCaptureResponse, VisionRequest, VisionResponse } from '../types';
 
 export async function setClickThrough(enabled: boolean): Promise<boolean> {
-  return await invoke<boolean>('set_click_through', { enabled });
+  try {
+    return await invoke<boolean>('set_click_through', { enabled });
+  } catch {
+    return false;
+  }
 }
 
 export async function toggleOverlay(): Promise<void> {
-  await invoke('toggle_overlay');
+  try {
+    await invoke('toggle_overlay');
+  } catch {}
 }
 
 const SETTINGS_STORAGE_KEY = 'unfold_settings';
@@ -19,7 +25,7 @@ export async function getSettings(): Promise<Settings> {
       return s;
     }
   } catch (err) {
-    console.warn('IPC get_settings failed, checking local storage:', err);
+    // Running in browser or IPC unavailable
   }
 
   try {
@@ -51,8 +57,7 @@ export async function saveSettings(settings: Settings): Promise<void> {
     try {
       await invoke('update_settings', { settings });
     } catch (innerErr) {
-      console.warn('IPC update_settings also failed:', innerErr);
-      // If running without backend, local storage save was already successful
+      // Running in browser, local storage save was already successful
     }
   }
 }
@@ -68,18 +73,67 @@ export async function sendMessage(
   imageBase64?: string,
   history?: ChatHistoryItem[]
 ): Promise<string> {
-  return await invoke<string>('send_message', {
-    prompt,
-    conversation_id: conversationId,
-    image_base64: imageBase64,
-    history,
-    request: {
-      prompt,
-      conversation_id: conversationId,
-      image_base64: imageBase64,
-      history,
-    },
-  });
+  const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
+  if (isTauri) {
+    try {
+      return await invoke<string>('send_message', {
+        prompt,
+        conversation_id: conversationId,
+        image_base64: imageBase64,
+        history,
+        request: {
+          prompt,
+          conversation_id: conversationId,
+          image_base64: imageBase64,
+          history,
+        },
+      });
+    } catch (err) {
+      console.warn('Tauri IPC send_message failed, attempting web direct fetch:', err);
+    }
+  }
+
+  // Web Browser Fallback: Direct CORS fetch to configured LLM provider
+  return await sendWebDirectMessage(prompt);
+}
+
+async function sendWebDirectMessage(prompt: string): Promise<string> {
+  try {
+    const settings = await getSettings();
+    const apiKey = settings.api_key;
+    if (!apiKey) return ''; // Fallback to instant verified blueprint
+
+    let endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
+    let model = settings.model || 'nvidia/nemotron-3.5-bolt-e4b';
+    if (settings.llm_provider === 'groq') {
+      endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+      model = settings.model || 'llama-3.3-70b-versatile';
+    } else if (settings.llm_provider === 'openai') {
+      endpoint = 'https://api.openai.com/v1/chat/completions';
+      model = settings.model || 'gpt-4o';
+    }
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: settings.temperature ?? 0.7,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || '';
+    }
+  } catch (err) {
+    console.warn('Web direct LLM fetch error, falling back to local blueprint:', err);
+  }
+  return '';
 }
 
 export async function captureScreen(request?: ScreenCaptureRequest): Promise<ScreenCaptureResponse> {
