@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { Settings, ScreenCaptureRequest, ScreenCaptureResponse, VisionRequest, VisionResponse } from '../types';
+import { UNFOLD_SYSTEM_PROMPT, UNFOLD_VISION_SYSTEM_PROMPT } from './prompts';
 
 export async function setClickThrough(enabled: boolean): Promise<boolean> {
   try {
@@ -145,6 +146,8 @@ async function sendWebDirectMessage(prompt: string, imageBase64?: string): Promi
         ]
       : prompt;
 
+    const systemPrompt = settings.system_prompt?.trim() || (hasImage ? UNFOLD_VISION_SYSTEM_PROMPT : UNFOLD_SYSTEM_PROMPT);
+
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -153,7 +156,10 @@ async function sendWebDirectMessage(prompt: string, imageBase64?: string): Promi
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: userContent }],
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
         temperature: settings.temperature ?? 0.7,
       }),
     });

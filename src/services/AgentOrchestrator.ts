@@ -2,6 +2,7 @@ import { BlackboardStep, DrawingElement, Point, Message } from '../types';
 import { getSettings, sendMessage } from './ipc';
 import { DecisionEngineLogger } from './DecisionEngineLogger';
 import { getConversationHistory } from './storage';
+import { PromptPipeline } from './PromptPipeline';
 
 export interface PedagogyMilestone {
   stageNumber: number;
@@ -1403,11 +1404,17 @@ INSTRUCTIONS FOR DRAWING AGENT & VOICE TEACHER:
               explanation = fallbackSpatial.stepBlueprints[idx].explanation;
             }
 
+            const rawElements = (s.elements && s.elements.length > 0) ? s.elements : fallbackSpatial.stepBlueprints[idx]?.elements || [];
+            const normalizedElements = PromptPipeline.getInstance().validateAndNormalizeElements(
+              rawElements,
+              fallbackSpatial.stepBlueprints[idx]?.elements || []
+            );
+
             return {
               step: stepNum,
               title: s.title || fallbackSpatial.stepBlueprints[idx]?.title || `Step ${stepNum}`,
               explanation,
-              elements: (s.elements && s.elements.length > 0) ? s.elements : fallbackSpatial.stepBlueprints[idx]?.elements || [],
+              elements: normalizedElements,
             };
           });
 

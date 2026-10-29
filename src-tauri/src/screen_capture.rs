@@ -4,6 +4,7 @@ use base64::Engine;
 use image::ImageBuffer;
 use std::io::Cursor;
 use tracing::{debug, info};
+use crate::commands::chat::UNFOLD_VISION_SYSTEM_PROMPT;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScreenCaptureRequest {
@@ -553,7 +554,7 @@ async fn call_openrouter_vision(request: VisionRequest) -> Result<VisionResponse
     let messages = vec![
         OpenRouterMessage {
             role: "system".to_string(),
-            content: serde_json::json!([{"type": "text", "text": "You are Unfold, an AI teaching assistant. Explain what you see in the image clearly and educationally."}]),
+            content: serde_json::json!([{"type": "text", "text": UNFOLD_VISION_SYSTEM_PROMPT}]),
         },
         OpenRouterMessage {
             role: "user".to_string(),
@@ -667,7 +668,7 @@ async fn call_openai_vision(request: VisionRequest) -> Result<VisionResponse, St
     let messages = vec![
         OpenAIMessage {
             role: "system".to_string(),
-            content: serde_json::json!([{"type": "text", "text": "You are Unfold, an AI teaching assistant. Explain what you see in the image clearly and educationally."}]),
+            content: serde_json::json!([{"type": "text", "text": UNFOLD_VISION_SYSTEM_PROMPT}]),
         },
         OpenAIMessage {
             role: "user".to_string(),
@@ -775,11 +776,11 @@ async fn call_nvidia_vision(request: VisionRequest) -> Result<VisionResponse, St
         }));
     }
 
-    // 2. Text prompt comes second
+    // 2. Text prompt comes second with full pedagogical vision instructions
     let prompt_text = if request.prompt.trim().is_empty() {
-        "Explain what you see on my screen clearly and educationally. Break down any code, diagrams, or errors visible.".to_string()
+        format!("{}\n\nPlease examine what is visible on the screen and teach it step by step.", UNFOLD_VISION_SYSTEM_PROMPT)
     } else {
-        format!("You are Unfold, an AI teaching assistant. Explain what you see on my screen clearly and educationally.\n\nUser Question: {}", request.prompt)
+        format!("{}\n\n[USER QUESTION & CONTEXT]\n{}", UNFOLD_VISION_SYSTEM_PROMPT, request.prompt)
     };
 
     user_content.push(serde_json::json!({
@@ -917,6 +918,8 @@ async fn call_gemini_vision(request: VisionRequest) -> Result<VisionResponse, St
     #[serde(rename_all = "camelCase")]
     struct GeminiRequest {
         contents: Vec<GeminiContent>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        system_instruction: Option<GeminiContent>,
         generation_config: GeminiConfig,
     }
 
@@ -966,7 +969,6 @@ async fn call_gemini_vision(request: VisionRequest) -> Result<VisionResponse, St
     }
 
     let mut parts = vec![
-        GeminiPart::Text { text: "You are Unfold, an AI teaching assistant. Explain what you see in the image clearly and educationally.".to_string() },
         GeminiPart::Text { text: request.prompt },
     ];
 
@@ -981,6 +983,9 @@ async fn call_gemini_vision(request: VisionRequest) -> Result<VisionResponse, St
 
     let body = GeminiRequest {
         contents: vec![GeminiContent { parts }],
+        system_instruction: Some(GeminiContent {
+            parts: vec![GeminiPart::Text { text: UNFOLD_VISION_SYSTEM_PROMPT.to_string() }],
+        }),
         generation_config: GeminiConfig {
             temperature: 0.7,
             max_output_tokens: 4096,
